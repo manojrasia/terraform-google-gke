@@ -19,7 +19,7 @@ auth:
   # Emails exactly as GitHub reports them (your primary, verified GitHub email)
   admins:
     - manoj1chaurasia2@gmail.com
-  viewers: []
+  viewers: 
     - manoj1chaurasia2@gmail.com
 alerting:
   slack:
