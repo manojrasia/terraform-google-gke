@@ -125,3 +125,4 @@ jobs:
       - name: bootstrap Argo CD
         working-directory: .
         run: bash scripts/bootstrap-argocd.sh "platform/clusters/${{ steps.out.outputs.name }}.yaml"
+        
