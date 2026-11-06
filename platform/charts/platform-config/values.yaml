@@ -1,0 +1,10 @@
+# Injected by platform/apps from platform/clusters/<cluster>.yaml
+cluster:
+  name: ""
+  projectId: ""
+  domain: ""
+alerting:
+  slack:
+    enabled: false
+wiz:
+  enabled: false

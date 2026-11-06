@@ -1,0 +1,13 @@
+# Expandable standard disks; pvc-autoresizer grows PVCs annotated with resize.topolvm.io/*
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: standard-autoresize
+  annotations:
+    resize.topolvm.io/enabled: "true"
+provisioner: pd.csi.storage.gke.io
+parameters:
+  type: pd-standard
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete

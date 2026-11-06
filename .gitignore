@@ -1,0 +1,19 @@
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash*.log
+tfplan
+*.tfplan
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+# never commit credentials
+*.json.key
+*-key.json
+# local scratch
+out/
+.rendered/

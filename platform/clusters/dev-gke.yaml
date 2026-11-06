@@ -1,0 +1,35 @@
+# Per-cluster settings for the platform. File name = cluster name.
+# Values here must match live/dev/main.tf.
+cluster:
+  name: dev-gke
+  projectId: boreal-conquest-421512
+  region: asia-south1
+  environment: dev                 # selects workloads/*/overlays/dev
+  domain: dev.stack.internal
+
+auth:
+  github:
+    # GitHub -> Settings -> Developer settings -> OAuth Apps -> New OAuth App
+    #   Homepage URL:               http://argocd.dev.stack.internal
+    #   Authorization callback URL: http://dex.dev.stack.internal/dex/callback
+    # Put the Client ID here and the Client secret in Secret Manager:
+    #   printf '%s' 'SECRET' | gcloud secrets versions add dev-gke-dex-github-client-secret --data-file=-
+    clientID: "REPLACE_WITH_GITHUB_OAUTH_CLIENT_ID"
+    orgs: []                       # e.g. [my-company] to allow only org members
+  # Emails exactly as GitHub reports them (your primary, verified GitHub email)
+  admins:
+    - manoj1chaurasia2@gmail.com
+  viewers: []
+
+alerting:
+  slack:
+    enabled: false                 # also set enable_slack_alerts = true in Terraform
+    channel: "#alerts"
+
+policies:
+  enforcementAction: dryrun        # switch to deny once Gatekeeper audit shows no violations
+
+addons:
+  wiz:
+    enabled: false                 # also set enable_wiz = true in Terraform
+    sensor: false

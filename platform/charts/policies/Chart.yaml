@@ -1,0 +1,5 @@
+apiVersion: v2
+name: policies
+description: Gatekeeper constraint templates and constraints
+type: application
+version: 1.0.0

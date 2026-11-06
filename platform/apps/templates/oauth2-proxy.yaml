@@ -1,0 +1,45 @@
+{{- if .Values.addons.oauth2Proxy.enabled }}
+{{- $upstreams := dict
+      "prometheus"   "http://prometheus-prometheus.monitoring.svc:9090"
+      "alertmanager" "http://prometheus-alertmanager.monitoring.svc:9093"
+      "gpm"          "http://gatekeeper-policy-manager.gatekeeper-system.svc:80" }}
+{{- range $name, $upstream := $upstreams }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  {{- include "platform.meta" (dict "name" (printf "oauth2-proxy-%s" $name) "wave" 4) | nindent 2 }}
+spec:
+  project: platform
+  destination:
+    {{- include "platform.destination" "auth" | nindent 4 }}
+  syncPolicy:
+    {{- include "platform.syncPolicy" $ | nindent 4 }}
+  sources:
+    - repoURL: https://oauth2-proxy.github.io/manifests
+      chart: oauth2-proxy
+      targetRevision: {{ $.Values.addons.oauth2Proxy.version }}
+      helm:
+        releaseName: oauth2-proxy-{{ $name }}
+        valueFiles:
+          - $values/platform/values/oauth2-proxy.yaml
+        valuesObject:
+          config:
+            configFile: |-
+              provider = "oidc"
+              provider_display_name = "GitHub"
+              oidc_issuer_url = "{{ include "platform.url" (dict "host" "dex" "root" $) }}/dex"
+              redirect_url = "{{ include "platform.url" (dict "host" $name "root" $) }}/oauth2/callback"
+              upstreams = [ "{{ $upstream }}" ]
+              scope = "openid email profile"
+              cookie_name = "_oauth2_{{ $name }}"
+              cookie_secure = false
+              cookie_samesite = "lax"
+              reverse_proxy = true
+              skip_provider_button = true
+          authenticatedEmailsFile:
+            restricted_access: |-
+              {{- include "platform.allUsers" $ | nindent 14 }}
+    {{- include "platform.valuesSource" $ | nindent 4 }}
+{{- end }}
+{{- end }}

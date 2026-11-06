@@ -1,0 +1,6 @@
+replicaCount: 2
+config:
+  preferredURLScheme: http
+resources:
+  requests: { cpu: 20m, memory: 64Mi }
+  limits:   { memory: 256Mi }

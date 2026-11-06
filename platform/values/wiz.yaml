@@ -1,0 +1,15 @@
+global:
+  wizApiToken:
+    secret:
+      create: false          # synced from Secret Manager by External Secrets
+      name: wiz-api-token
+wiz-kubernetes-connector:
+  enabled: true
+  autoCreateConnector:
+    clusterFlavor: GKE
+  wiz-broker:
+    enabled: true
+wiz-admission-controller:
+  enabled: true
+  webhook:
+    policyEnforcementMethod: AUDIT   # report only; change to BLOCK when ready

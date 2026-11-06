@@ -1,0 +1,21 @@
+{{- if .Values.addons.pvcAutoresizer.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  {{- include "platform.meta" (dict "name" "pvc-autoresizer" "wave" 3) | nindent 2 }}
+spec:
+  project: platform
+  destination:
+    {{- include "platform.destination" "monitoring" | nindent 4 }}
+  syncPolicy:
+    {{- include "platform.syncPolicy" . | nindent 4 }}
+  sources:
+    - repoURL: https://topolvm.github.io/pvc-autoresizer
+      chart: pvc-autoresizer
+      targetRevision: {{ .Values.addons.pvcAutoresizer.version }}
+      helm:
+        releaseName: pvc-autoresizer
+        valueFiles:
+          - $values/platform/values/pvc-autoresizer.yaml
+    {{- include "platform.valuesSource" . | nindent 4 }}
+{{- end }}

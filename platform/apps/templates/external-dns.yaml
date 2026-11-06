@@ -1,0 +1,32 @@
+{{- if .Values.addons.externalDns.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  {{- include "platform.meta" (dict "name" "external-dns" "wave" 2) | nindent 2 }}
+spec:
+  project: platform
+  destination:
+    {{- include "platform.destination" "external-dns" | nindent 4 }}
+  syncPolicy:
+    {{- include "platform.syncPolicy" . | nindent 4 }}
+  sources:
+    - repoURL: https://kubernetes-sigs.github.io/external-dns/
+      chart: external-dns
+      targetRevision: {{ .Values.addons.externalDns.version }}
+      helm:
+        releaseName: external-dns
+        valueFiles:
+          - $values/platform/values/external-dns.yaml
+        valuesObject:
+          domainFilters:
+            - {{ .Values.cluster.domain }}
+          txtOwnerId: {{ .Values.cluster.name }}
+          extraArgs:
+            - --google-project={{ .Values.cluster.projectId }}
+            - --google-zone-visibility=private
+          serviceAccount:
+            name: external-dns
+            annotations:
+              iam.gke.io/gcp-service-account: {{ .Values.cluster.name }}-edns@{{ .Values.cluster.projectId }}.iam.gserviceaccount.com
+    {{- include "platform.valuesSource" . | nindent 4 }}
+{{- end }}

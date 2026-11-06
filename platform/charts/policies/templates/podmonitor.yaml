@@ -1,0 +1,11 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: gatekeeper
+  namespace: gatekeeper-system
+spec:
+  selector:
+    matchLabels:
+      gatekeeper.sh/system: "yes"
+  podMetricsEndpoints:
+    - port: metrics

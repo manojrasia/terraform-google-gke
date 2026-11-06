@@ -1,0 +1,55 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
+spec:
+  description: Cluster add-ons managed by the platform team
+  sourceRepos:
+    - {{ .Values.repoURL }}
+    - https://argoproj.github.io/argo-helm
+    - https://charts.external-secrets.io
+    - docker.io/envoyproxy
+    - https://kubernetes-sigs.github.io/external-dns/
+    - https://prometheus-community.github.io/helm-charts
+    - https://topolvm.github.io/pvc-autoresizer
+    - https://charts.dexidp.io
+    - https://oauth2-proxy.github.io/manifests
+    - https://open-policy-agent.github.io/gatekeeper/charts
+    - https://sighupio.github.io/gatekeeper-policy-manager
+    - https://wiz-sec.github.io/charts
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: "*"
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: workloads
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
+spec:
+  description: Team applications - namespaced resources only, no platform namespaces
+  sourceRepos:
+    - {{ .Values.repoURL }}
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: "*"
+    {{- range list "kube-system" "kube-public" "kube-node-lease" "argocd" "auth" "monitoring" "external-dns" "external-secrets" "envoy-gateway-system" "gatekeeper-system" "wiz" }}
+    - server: https://kubernetes.default.svc
+      namespace: "!{{ . }}"
+    {{- end }}
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceBlacklist:
+    - group: ""
+      kind: ResourceQuota
+    - group: ""
+      kind: LimitRange

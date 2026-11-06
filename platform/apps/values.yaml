@@ -1,0 +1,44 @@
+# Defaults for every cluster. Per-cluster values: platform/clusters/<cluster>.yaml
+repoURL: https://github.com/manojrasia/terraform-google-gke.git
+targetRevision: main
+
+# Filled by platform/clusters/<cluster>.yaml
+cluster:
+  name: ""
+  projectId: ""
+  region: ""
+  environment: ""
+  domain: ""
+
+auth:
+  github:
+    clientID: ""   # GitHub OAuth App client ID (the secret is in Secret Manager)
+    orgs: []       # optional: only members of these GitHub orgs can log in
+  admins: []       # emails (as on GitHub) with admin rights in Argo CD / Grafana / UIs
+  viewers: []      # emails with read-only rights
+
+alerting:
+  slack:
+    enabled: false
+    channel: "#alerts"
+
+policies:
+  enforcementAction: dryrun   # dryrun -> warn -> deny once the audit is clean
+
+# Chart versions are pinned here; upgrade = PR changing a version
+addons:
+  argocd:                  { enabled: true,  version: 10.14.0 }
+  externalSecrets:         { enabled: true,  version: 2.13.0 }
+  envoyGateway:            { enabled: true,  version: 1.9.3 }
+  externalDns:             { enabled: true,  version: 1.23.0 }
+  kubePrometheusStack:     { enabled: true,  version: 92.21.1 }
+  blackboxExporter:        { enabled: true,  version: 11.21.1 }
+  pvcAutoresizer:          { enabled: true,  version: 0.21.0 }
+  dex:                     { enabled: true,  version: 0.26.0 }
+  oauth2Proxy:             { enabled: true,  version: 10.7.2 }
+  gatekeeper:              { enabled: true,  version: 3.23.1 }
+  gatekeeperPolicyManager: { enabled: true,  version: 0.17.0 }
+  wiz:                     { enabled: false, version: 0.3.92, sensor: false }
+
+workloads:
+  enabled: true

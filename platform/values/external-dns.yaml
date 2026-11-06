@@ -1,0 +1,11 @@
+provider:
+  name: google
+sources:
+  - gateway-httproute
+policy: sync          # also deletes records whose routes were removed (only its own, via TXT)
+registry: txt
+interval: 1m
+logFormat: json
+resources:
+  requests: { cpu: 10m, memory: 64Mi }
+  limits:   { memory: 128Mi }

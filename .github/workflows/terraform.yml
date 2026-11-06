@@ -1,0 +1,123 @@
+name: terraform
+
+on:
+  pull_request:
+    paths:
+      - "live/**"
+      - "modules/**"
+      - ".github/workflows/terraform.yml"
+  push:
+    branches: [main]
+    paths:
+      - "live/**"
+      - "modules/**"
+      - "scripts/bootstrap-argocd.sh"
+      - "platform/values/argocd.yaml"
+      - ".github/workflows/terraform.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_VERSION: "1.16.7"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+      - run: terraform fmt -check -recursive -diff
+      - name: validate
+        run: |
+          for d in live/*/ bootstrap/; do
+            echo "::group::$d"
+            terraform -chdir="$d" init -backend=false
+            terraform -chdir="$d" validate
+            echo "::endgroup::"
+          done
+
+  plan:
+    if: github.event_name == 'pull_request'
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write          # OIDC token for Workload Identity Federation
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [dev]             # one entry per folder under live/
+    concurrency: tf-${{ matrix.env }}
+    defaults:
+      run:
+        working-directory: live/${{ matrix.env }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_TF_PLAN_SA }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+      - run: terraform init -backend-config=backend.hcl
+      - name: plan
+        run: |
+          terraform plan -lock-timeout=5m -no-color -out=tfplan | tee plan.txt
+          {
+            echo "### Terraform plan: \`${{ matrix.env }}\`"
+            echo '```'
+            grep -E '^(Plan:|No changes)|will be (created|destroyed|updated|replaced)|must be replaced' plan.txt || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  apply:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      max-parallel: 1
+      matrix:
+        env: [dev]
+    # GitHub Environment = approval gate. Only jobs in this environment can
+    # impersonate the apply service account (enforced by WIF in bootstrap/).
+    environment: ${{ matrix.env }}
+    concurrency: tf-${{ matrix.env }}
+    defaults:
+      run:
+        working-directory: live/${{ matrix.env }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_TF_APPLY_SA }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - run: terraform init -backend-config=backend.hcl
+      - run: terraform plan -lock-timeout=5m -out=tfplan
+      - run: terraform apply -lock-timeout=5m tfplan
+      - name: cluster name
+        id: out
+        run: echo "name=$(terraform output -json cluster | jq -r .name)" >> "$GITHUB_OUTPUT"
+
+      # ---- GitOps bootstrap (idempotent; no-op once Argo CD is running) ----
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: gke-gcloud-auth-plugin
+      - uses: azure/setup-helm@v4
+      - name: bootstrap Argo CD
+        working-directory: .
+        run: scripts/bootstrap-argocd.sh "platform/clusters/${{ steps.out.outputs.name }}.yaml"
