@@ -1,103 +1,176 @@
-# Private (internal) Standard GKE cluster – asia-south1
+# GKE platform (private cluster + GitOps)
 
-Terraform code that creates:
-
-- Custom VPC + regional subnet in `asia-south1` with secondary ranges for pods and services
-- Cloud Router + Cloud NAT (egress for private nodes)
-- **Private Standard GKE cluster** (regional, private nodes, private control-plane endpoint)
-- **Workload Identity** enabled (`<project>.svc.id.goog`, nodes in `GKE_METADATA` mode)
-- Dataplane V2, Shielded nodes, Managed Prometheus, maintenance window
-- Separate autoscaling node pool with a least-privilege node service account
-- Optional internal bastion VM (no public IP, SSH via IAP) to run `kubectl`
-- Optional GSA ↔ KSA Workload Identity bindings
-
-## Network layout
-
-| Range         | CIDR            | Purpose                 |
-|---------------|-----------------|-------------------------|
-| Subnet        | 10.10.0.0/20    | Nodes, bastion          |
-| Pods          | 10.20.0.0/16    | Pod IPs                 |
-| Services      | 10.30.0.0/20    | ClusterIP services      |
-| Control plane | 172.16.0.0/28   | GKE master (peered)     |
-
-## Prerequisites
-
-- Terraform >= 1.5, gcloud CLI
-- Your user needs (on the project): `roles/container.admin`, `roles/compute.networkAdmin`,
-  `roles/compute.securityAdmin`, `roles/compute.instanceAdmin.v1`, `roles/iam.serviceAccountAdmin`,
-  `roles/iam.serviceAccountUser`, `roles/resourcemanager.projectIamAdmin`, `roles/serviceusage.serviceUsageAdmin`
-  (or simply Owner on a dev project)
-- To SSH via IAP: `roles/iap.tunnelResourceAccessor` and `roles/compute.osAdminLogin`
-
-## Usage
-
-```bash
-gcloud auth application-default login
-cp terraform.tfvars.example terraform.tfvars   # edit project_id etc.
-# optional: cp backend.tf.example backend.tf    # remote state in GCS
-
-terraform init
-terraform plan -out tfplan
-terraform apply tfplan
-
-gcloud auth login
-gcloud auth application-default login
-gcloud config set project boreal-conquest-421512
-cp terraform.tfvars.example terraform.tfvars   # edit project_id
-terraform init && terraform plan -out tfplan && terraform apply tfplan
+Private, regional GKE clusters in `asia-south1`, built with Terraform from GitHub
+Actions (Workload Identity Federation, no keys), with every add-on managed by
+Argo CD from this repo. Users log in with **GitHub** through Dex.
 
 ```
-
-Cluster creation takes ~10–15 minutes.
-
-## Access the cluster (private endpoint)
-
-```bash
-# 1. SSH to the bastion through IAP
-$(terraform output -raw bastion_ssh_command)
-
-# 2. On the bastion
-gcloud container clusters get-credentials private-gke-cluster \
-  --region asia-south1 --internal-ip
-kubectl get nodes
+bootstrap/                one-time per project: APIs, state bucket, WIF, CI service accounts
+modules/gke-cluster/      reusable cluster module (VPC, NAT, GKE, node pools, DNS, secrets, IAM)
+live/<env>/               one folder per cluster (calls the module)
+platform/
+  clusters/<cluster>.yaml per-cluster inputs: domain, GitHub OAuth app, users
+  apps/                   app-of-apps chart: one Argo CD Application per add-on
+  values/                 shared Helm values per add-on
+  charts/platform-config  gateway, routes, storage class, secret sync
+  charts/policies         Gatekeeper policies
+workloads/<app>/          team apps (kustomize base + overlays/<env>)
+scripts/bootstrap-argocd.sh
+.github/workflows/        terraform (plan on PR, apply on main) + platform validation
 ```
 
-If you have VPN/Interconnect into the VPC, add your range to `master_authorized_networks` and run kubectl directly.
+## How it fits together
 
-## Test Workload Identity
+1. **Terraform** (CI) creates the cluster, its private DNS zone, the Google
+   service accounts for ExternalDNS / External Secrets, and the platform secrets
+   in Secret Manager. Generated secrets use write-only arguments, so they are
+   **never stored in Terraform state**.
+2. The same CI job runs `scripts/bootstrap-argocd.sh` **once**: it installs Argo
+   CD and creates the `root` Application. CI reaches the private control plane
+   through GKE's **IAM-protected DNS endpoint** - no bastion or public IP.
+3. Argo CD installs everything else from Git in order (sync waves):
+   External Secrets + Envoy Gateway → gateway/routes/secret sync → ExternalDNS +
+   Prometheus/Grafana → Dex, autoresizer, blackbox → oauth2-proxy, Argo CD
+   itself, Gatekeeper → policies, Policy Manager, Wiz → your `workloads/`.
+4. Every later change is a pull request. Argo CD reverts manual `kubectl` edits.
 
-With the example binding in `terraform.tfvars.example` (`app-gsa` → `default/app-ksa`):
+| Concern | How it's handled |
+|---|---|
+| CI credentials | WIF: PRs get a read-only SA; only jobs in a GitHub Environment can use the apply SA |
+| Secrets | Secret Manager → External Secrets (Workload Identity). Nothing secret in Git or state |
+| Login | Dex + GitHub. No local users; Argo CD admin disabled; Grafana login form disabled |
+| Authorization | Only emails in `platform/clusters/<cluster>.yaml` get in (Argo CD RBAC, Grafana roles, oauth2-proxy allowlist) |
+| Cluster access | IAM (`cluster_admins`/`cluster_developers` in `live/<env>/main.tf`) over the DNS endpoint |
+| Network | Private nodes, no public endpoint, internal LB only, private DNS zone, Cloud NAT egress |
+| Least privilege | Node SA minimal; ExternalDNS can edit only its zone; ESO can read only its cluster's secrets |
+| HA | Regional control plane, nodes in 3 zones, 2+ replicas and PDBs for every add-on, Argo CD HA Redis |
+| Policy | Gatekeeper: owner label, no privileged, requests/limits, no `latest` (start `dryrun`) |
+| Upgrades | Chart versions pinned in `platform/apps/values.yaml`; Dependabot for actions + providers |
+
+## First-time setup
+
+### 1. Bootstrap the project (once, locally, as project Owner)
 
 ```bash
-kubectl create serviceaccount app-ksa -n default
-kubectl annotate serviceaccount app-ksa -n default \
-  iam.gke.io/gcp-service-account=app-gsa@<PROJECT_ID>.iam.gserviceaccount.com
-
-kubectl run wi-test -n default --rm -it \
-  --image=google/cloud-sdk:slim \
-  --overrides='{"spec":{"serviceAccountName":"app-ksa"}}' \
-  -- gcloud auth list
+cd bootstrap
+terraform init && terraform apply
+terraform output github_variables
 ```
 
-The active account shown should be `app-gsa@<PROJECT_ID>.iam.gserviceaccount.com`.
+Optional but recommended: move this state into the new bucket - uncomment the
+`backend "gcs"` block in `bootstrap/versions.tf`, then
+`terraform init -migrate-state`.
 
-## Destroy
+### 2. Configure GitHub
 
-`deletion_protection = true` by default. Set it to `false`, `terraform apply`, then `terraform destroy`.
+- **Settings → Secrets and variables → Actions → Variables**: add
+  `GCP_PROJECT_ID`, `GCP_WIF_PROVIDER`, `GCP_TF_PLAN_SA`, `GCP_TF_APPLY_SA`
+  from the output above (they are identifiers, not secrets).
+- **Settings → Environments**: create `dev` (for `prod`, add required reviewers).
+- **Settings → Branches**: protect `main` (require PR + the `terraform` and
+  `platform` checks).
 
-P=boreal-conquest-421512
-ME=$(gcloud config get-value account)
+### 3. Create the GitHub OAuth App (real users)
 
-gcloud projects add-iam-policy-binding $P --member="user:$ME" --role="roles/iap.tunnelResourceAccessor"
-gcloud projects add-iam-policy-binding $P --member="user:$ME" --role="roles/compute.osAdminLogin"
+GitHub → **Settings → Developer settings → OAuth Apps → New OAuth App**:
 
-# Make sure the tools are installed (the startup script normally does this)
-sudo apt-get install -y kubectl google-cloud-cli-gke-gcloud-auth-plugin
+| Field | Value |
+|---|---|
+| Homepage URL | `http://argocd.dev.stack.internal` |
+| Authorization callback URL | `http://dex.dev.stack.internal/dex/callback` |
 
-gcloud container clusters get-credentials private-gke-cluster \
-  --region asia-south1 \
-  --project boreal-conquest-421512 \
-  --internal-ip
+Put the **Client ID** in `platform/clusters/dev-gke.yaml` (`auth.github.clientID`)
+and list your users' GitHub emails under `auth.admins` / `auth.viewers`.
+If you use a GitHub organization, set `auth.github.orgs` so only its members can
+authenticate at all.
 
-kubectl get nodes
+> Emails must match the **primary verified email** on each user's GitHub account.
 
+### 4. Deploy
+
+Commit and push to `main`. The `terraform` workflow applies `live/dev` and
+bootstraps Argo CD. Then store the GitHub client secret (Terraform created the
+empty secret):
+
+```bash
+printf '%s' 'GITHUB_CLIENT_SECRET' | \
+  gcloud secrets versions add dev-gke-dex-github-client-secret --data-file=-
+```
+
+External Secrets picks it up within an hour; to apply it right away:
+`kubectl -n auth annotate externalsecret dex-secrets force-sync=$(date +%s) --overwrite`.
+
+Watch the rollout:
+
+```bash
+gcloud container clusters get-credentials dev-gke --region asia-south1 \
+  --project boreal-conquest-421512 --dns-endpoint
+kubectl -n argocd get applications
+```
+
+## Using the UIs
+
+Everything is internal (`*.dev.stack.internal`). From your laptop, open a SOCKS
+proxy through the IAP bastion and point a browser at it:
+
+```bash
+gcloud compute ssh dev-gke-bastion --zone asia-south1-a \
+  --project boreal-conquest-421512 --tunnel-through-iap -- -N -D 1080
+# Windows (Git Bash):
+"/c/Program Files/Google/Chrome/Application/chrome.exe" \
+  --proxy-server="socks5://localhost:1080" --user-data-dir="/c/temp/gke-proxy"
+```
+
+| URL | |
+|---|---|
+| http://argocd.dev.stack.internal | Argo CD |
+| http://grafana.dev.stack.internal | Grafana |
+| http://prometheus.dev.stack.internal | Prometheus |
+| http://alertmanager.dev.stack.internal | Alertmanager |
+| http://gpm.dev.stack.internal | Gatekeeper Policy Manager |
+
+All sign in with GitHub.
+
+## Day 2
+
+- **Add/remove a user**: edit `auth.admins` / `auth.viewers` → PR → merge.
+- **Upgrade an add-on**: bump its version in `platform/apps/values.yaml` → PR.
+- **Deploy an app**: add `workloads/<app>/base` + `workloads/<app>/overlays/dev`
+  (see `workloads/hello`). It appears in Argo CD as `<app>`, namespace `<app>`.
+- **Turn policies on**: when Policy Manager shows no violations, set
+  `policies.enforcementAction: deny`.
+- **Slack alerts**: `enable_slack_alerts = true` (Terraform) + `alerting.slack.enabled: true`,
+  then add the webhook URL to `dev-gke-alertmanager-slack-webhook`.
+- **Rotate a generated secret**: bump `secret_data_wo_version` in
+  `modules/gke-cluster/secrets.tf`.
+- **Break-glass**: Argo CD has no local admin. Cluster admins use `kubectl` (IAM).
+  Grafana's admin password is in `dev-gke-grafana-admin-password`.
+
+## Add a cluster
+
+1. `cp -r live/dev live/prod`; edit `main.tf` (name, domain, CIDRs, node pools)
+   and `backend.hcl` (`prefix = "live/prod"`).
+2. `cp platform/clusters/dev-gke.yaml platform/clusters/prod-gke.yaml` and edit.
+3. Add `prod` to the matrices in `.github/workflows/terraform.yml` and to
+   `github_environments` in `bootstrap/terraform.tfvars` (re-apply bootstrap).
+4. Create the `prod` GitHub Environment with required reviewers. Add a
+   `workloads/*/overlays/prod` for each app that should run there.
+
+## Tear down
+
+Remove platform load balancers **before** destroying the cluster, otherwise
+GKE-created LB resources block VPC deletion:
+
+```bash
+kubectl -n argocd delete application root      # cascades to every add-on
+kubectl -n envoy-gateway-system get svc         # wait until the LB service is gone
+# then set deletion_protection = false in live/<env>/main.tf, apply, and destroy
+```
+
+## Known gaps (deliberate, for now)
+
+- **HTTP only.** Traffic stays inside the VPC, but logins are unencrypted on the
+  wire. Next step: cert-manager with an internal CA (or a real domain + Let's
+  Encrypt), then `cookie_secure = true`.
+- **No default-deny NetworkPolicies** yet; add per namespace once traffic flows are known.
+- GitHub Actions are pinned to major versions; pin to commit SHAs for supply-chain hardening.

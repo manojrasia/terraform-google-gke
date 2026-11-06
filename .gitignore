@@ -1,16 +1,19 @@
-.terraform/
+# Terraform
+**/.terraform/*
 *.tfstate
 *.tfstate.*
-crash.log
-crash.*.log
-*.tfvars
-!*.tfvars.example
+crash*.log
+tfplan
+*.tfplan
 override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
-.terraform.tfstate.lock.info
 .terraformrc
 terraform.rc
-.terraform.lock.hcl
-tfplan
+# never commit credentials
+*.json.key
+*-key.json
+# local scratch
+out/
+.rendered/

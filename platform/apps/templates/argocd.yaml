@@ -1,0 +1,51 @@
+{{- if .Values.addons.argocd.enabled }}
+# Argo CD manages itself. Bootstrap (scripts/bootstrap-argocd.sh) installs it once with the
+# same chart + platform/values/argocd.yaml; from then on changes come only from Git.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  {{- include "platform.meta" (dict "name" "argocd" "wave" 4 "finalizer" false) | nindent 2 }}
+spec:
+  project: platform
+  destination:
+    {{- include "platform.destination" "argocd" | nindent 4 }}
+  syncPolicy:
+    {{- include "platform.syncPolicy" . | nindent 4 }}
+  sources:
+    - repoURL: https://argoproj.github.io/argo-helm
+      chart: argo-cd
+      targetRevision: {{ .Values.addons.argocd.version }}
+      helm:
+        releaseName: argocd
+        valueFiles:
+          - $values/platform/values/argocd.yaml
+        valuesObject:
+          global:
+            domain: argocd.{{ .Values.cluster.domain }}
+          configs:
+            cm:
+              url: {{ include "platform.url" (dict "host" "argocd" "root" .) }}
+              oidc.config: |
+                name: GitHub
+                issuer: {{ include "platform.url" (dict "host" "dex" "root" .) }}/dex
+                clientID: argocd
+                clientSecret: $argocd-oidc:clientSecret
+                requestedScopes: ["openid", "profile", "email"]
+            rbac:
+              policy.csv: |
+                {{- range .Values.auth.admins }}
+                g, {{ . }}, role:admin
+                {{- end }}
+                {{- range .Values.auth.viewers }}
+                g, {{ . }}, role:readonly
+                {{- end }}
+          controller:
+            metrics: { serviceMonitor: { enabled: true } }
+          server:
+            metrics: { serviceMonitor: { enabled: true } }
+          repoServer:
+            metrics: { serviceMonitor: { enabled: true } }
+          applicationSet:
+            metrics: { serviceMonitor: { enabled: true } }
+    {{- include "platform.valuesSource" . | nindent 4 }}
+{{- end }}

@@ -1,0 +1,12 @@
+# dryrun = audit only, warn = admit with warning, deny = block
+enforcementAction: dryrun
+excludedNamespaces:
+  - kube-system
+  - kube-public
+  - kube-node-lease
+  - gmp-system
+  - gmp-public
+  - "gke-*"
+  - wiz
+disallowedTags:
+  - latest

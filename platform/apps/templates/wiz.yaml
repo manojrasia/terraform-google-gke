@@ -1,0 +1,32 @@
+{{- if .Values.addons.wiz.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  {{- include "platform.meta" (dict "name" "wiz" "wave" 5) | nindent 2 }}
+spec:
+  project: platform
+  destination:
+    {{- include "platform.destination" "wiz" | nindent 4 }}
+  syncPolicy:
+    {{- include "platform.syncPolicy" . | nindent 4 }}
+  sources:
+    - repoURL: https://wiz-sec.github.io/charts
+      chart: wiz-kubernetes-integration
+      targetRevision: {{ .Values.addons.wiz.version }}
+      helm:
+        releaseName: wiz-integration
+        valueFiles:
+          - $values/platform/values/wiz.yaml
+        valuesObject:
+          global:
+            clusterDisplayName: {{ .Values.cluster.name }}
+            clusterTags:
+              environment: {{ .Values.cluster.environment }}
+          wiz-kubernetes-connector:
+            autoCreateConnector:
+              connectorName: {{ .Values.cluster.name }}
+          wiz-sensor:
+            enabled: {{ .Values.addons.wiz.sensor }}
+            sensorClusterName: {{ .Values.cluster.name }}
+    {{- include "platform.valuesSource" . | nindent 4 }}
+{{- end }}

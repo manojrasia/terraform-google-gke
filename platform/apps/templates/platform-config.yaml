@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  {{- include "platform.meta" (dict "name" "platform-config" "wave" 1) | nindent 2 }}
+spec:
+  project: platform
+  destination:
+    {{- include "platform.destination" "envoy-gateway-system" | nindent 4 }}
+  syncPolicy:
+    {{- include "platform.syncPolicy" . | nindent 4 }}
+  source:
+    repoURL: {{ .Values.repoURL }}
+    targetRevision: {{ .Values.targetRevision }}
+    path: platform/charts/platform-config
+    helm:
+      releaseName: platform-config
+      valuesObject:
+        cluster:
+          {{- toYaml .Values.cluster | nindent 10 }}
+        alerting:
+          {{- toYaml .Values.alerting | nindent 10 }}
+        wiz:
+          enabled: {{ .Values.addons.wiz.enabled }}

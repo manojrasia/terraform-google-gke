@@ -1,0 +1,5 @@
+apiVersion: v2
+name: platform-config
+description: Cluster-level config - namespaces, storage, gateway, routes, secret sync
+type: application
+version: 1.0.0

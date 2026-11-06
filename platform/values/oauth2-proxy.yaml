@@ -1,0 +1,12 @@
+replicaCount: 2
+config:
+  existingSecret: oauth2-proxy   # client-id, client-secret, cookie-secret
+authenticatedEmailsFile:
+  enabled: true                  # only listed emails get in
+  persistence: configmap
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+resources:
+  requests: { cpu: 10m, memory: 32Mi }
+  limits:   { memory: 128Mi }

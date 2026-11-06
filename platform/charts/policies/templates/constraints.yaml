@@ -1,0 +1,53 @@
+{{- $action := .Values.enforcementAction }}
+{{- $excluded := .Values.excludedNamespaces }}
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: namespaces-must-have-owner
+spec:
+  enforcementAction: {{ $action }}
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+    excludedNamespaces: {{ concat $excluded (list "default") | toJson }}
+  parameters:
+    labels: ["owner"]
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sPrivilegedContainer
+metadata:
+  name: no-privileged-containers
+spec:
+  enforcementAction: {{ $action }}
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    excludedNamespaces: {{ $excluded | toJson }}
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sContainerResources
+metadata:
+  name: containers-must-set-resources
+spec:
+  enforcementAction: {{ $action }}
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    excludedNamespaces: {{ $excluded | toJson }}
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sDisallowedTags
+metadata:
+  name: no-latest-tag
+spec:
+  enforcementAction: {{ $action }}
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    excludedNamespaces: {{ $excluded | toJson }}
+  parameters:
+    tags: {{ .Values.disallowedTags | toJson }}

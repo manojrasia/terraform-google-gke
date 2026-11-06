@@ -1,0 +1,21 @@
+{{- if .Values.addons.blackboxExporter.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  {{- include "platform.meta" (dict "name" "blackbox-exporter" "wave" 3) | nindent 2 }}
+spec:
+  project: platform
+  destination:
+    {{- include "platform.destination" "monitoring" | nindent 4 }}
+  syncPolicy:
+    {{- include "platform.syncPolicy" . | nindent 4 }}
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: prometheus-blackbox-exporter
+      targetRevision: {{ .Values.addons.blackboxExporter.version }}
+      helm:
+        releaseName: blackbox-exporter
+        valueFiles:
+          - $values/platform/values/blackbox-exporter.yaml
+    {{- include "platform.valuesSource" . | nindent 4 }}
+{{- end }}

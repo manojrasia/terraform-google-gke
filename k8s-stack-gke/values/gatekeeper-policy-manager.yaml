@@ -1,4 +1,0 @@
-replicaCount: 2                  # gatekeeper-policy-manager 2/2
-config:
-  preferredURLScheme: http
-# Login is handled by oauth2-proxy-gpm (Dex) in front of it

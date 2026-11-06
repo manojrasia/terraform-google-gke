@@ -1,5 +1,0 @@
-apiVersion: v2
-description: Common library chart for shared templates
-name: wiz-common
-type: library
-version: 0.1.9

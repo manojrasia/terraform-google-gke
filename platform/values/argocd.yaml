@@ -1,0 +1,74 @@
+# Used by BOTH the one-time bootstrap (helm) and the self-managed "argocd" Application.
+# Cluster-specific settings (URL, SSO, RBAC, ServiceMonitors) are added by platform/apps.
+global:
+  logging:
+    format: json
+
+configs:
+  params:
+    server.insecure: true            # TLS terminates nowhere yet (HTTP inside the VPC)
+  cm:
+    admin.enabled: false             # SSO only; break-glass = kubectl via IAM
+    exec.enabled: false
+    timeout.reconciliation: 180s
+    # Let sync waves wait for child Applications to become Healthy (app-of-apps ordering)
+    resource.customizations.health.argoproj.io_Application: |
+      hs = {}
+      hs.status = "Progressing"
+      hs.message = ""
+      if obj.status ~= nil and obj.status.health ~= nil then
+        hs.status = obj.status.health.status
+        if obj.status.health.message ~= nil then
+          hs.message = obj.status.health.message
+        end
+      end
+      return hs
+  rbac:
+    policy.default: ""               # no access unless listed in platform/clusters/<cluster>.yaml
+    scopes: "[email]"
+  repositories:
+    envoyproxy-oci:
+      name: envoyproxy
+      url: docker.io/envoyproxy
+      type: helm
+      enableOCI: "true"
+
+dex:
+  enabled: false                     # the standalone Dex (auth namespace) is used
+
+redis-ha:
+  enabled: true                      # HA Redis (3 replicas across zones)
+
+controller:
+  replicas: 1
+  metrics: { enabled: true }
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits:   { memory: 2Gi }
+
+server:
+  replicas: 2
+  pdb: { enabled: true, minAvailable: 1 }
+  metrics: { enabled: true }
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits:   { memory: 512Mi }
+
+repoServer:
+  replicas: 2
+  pdb: { enabled: true, minAvailable: 1 }
+  metrics: { enabled: true }
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { memory: 1Gi }
+
+applicationSet:
+  replicas: 2
+  pdb: { enabled: true, minAvailable: 1 }
+  metrics: { enabled: true }
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits:   { memory: 256Mi }
+
+notifications:
+  enabled: true

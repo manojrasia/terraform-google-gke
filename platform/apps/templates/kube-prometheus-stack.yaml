@@ -1,0 +1,82 @@
+{{- if .Values.addons.kubePrometheusStack.enabled }}
+{{- $slack := .Values.alerting.slack }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  {{- include "platform.meta" (dict "name" "kube-prometheus-stack" "wave" 2) | nindent 2 }}
+spec:
+  project: platform
+  destination:
+    {{- include "platform.destination" "monitoring" | nindent 4 }}
+  syncPolicy:
+    {{- include "platform.syncPolicy" . | nindent 4 }}
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: {{ .Values.addons.kubePrometheusStack.version }}
+      helm:
+        releaseName: kube-prometheus-stack
+        valueFiles:
+          - $values/platform/values/kube-prometheus-stack.yaml
+        valuesObject:
+          prometheus:
+            prometheusSpec:
+              externalUrl: {{ include "platform.url" (dict "host" "prometheus" "root" .) }}
+              externalLabels:
+                cluster: {{ .Values.cluster.name }}
+                environment: {{ .Values.cluster.environment }}
+          alertmanager:
+            alertmanagerSpec:
+              externalUrl: {{ include "platform.url" (dict "host" "alertmanager" "root" .) }}
+              {{- if $slack.enabled }}
+              secrets:
+                - alertmanager-slack   # mounted at /etc/alertmanager/secrets/alertmanager-slack/
+              {{- end }}
+            config:
+              global:
+                resolve_timeout: 5m
+              route:
+                group_by: ["alertname", "namespace"]
+                group_wait: 30s
+                group_interval: 5m
+                repeat_interval: 12h
+                receiver: {{ ternary "slack" "null" $slack.enabled | quote }}
+                routes:
+                  - receiver: "null"
+                    matchers: ['alertname = "Watchdog"']
+              receivers:
+                - name: "null"
+                {{- if $slack.enabled }}
+                - name: slack
+                  slack_configs:
+                    - api_url_file: /etc/alertmanager/secrets/alertmanager-slack/url
+                      channel: {{ $slack.channel | quote }}
+                      send_resolved: true
+                      title: '[{{ .Values.cluster.name }}] {{`{{ .CommonLabels.alertname }}`}}'
+                      text: '{{`{{ range .Alerts }}{{ .Annotations.summary }} {{ end }}`}}'
+                {{- end }}
+              inhibit_rules:
+                - source_matchers: ['severity = "critical"']
+                  target_matchers: ['severity =~ "warning|info"']
+                  equal: ["namespace", "alertname"]
+          grafana:
+            grafana.ini:
+              server:
+                root_url: {{ include "platform.url" (dict "host" "grafana" "root" .) }}
+              auth.generic_oauth:
+                enabled: true
+                name: GitHub
+                client_id: grafana
+                scopes: openid profile email
+                auth_url: {{ include "platform.url" (dict "host" "dex" "root" .) }}/dex/auth
+                token_url: {{ include "platform.url" (dict "host" "dex" "root" .) }}/dex/token
+                api_url: {{ include "platform.url" (dict "host" "dex" "root" .) }}/dex/userinfo
+                email_attribute_path: email
+                login_attribute_path: email
+                use_pkce: true
+                allow_sign_up: true
+                auto_login: true
+                role_attribute_strict: true   # users not listed below cannot log in
+                role_attribute_path: "contains({{ include "platform.jmesList" .Values.auth.admins }}, email) && 'Admin' || contains({{ include "platform.jmesList" .Values.auth.viewers }}, email) && 'Viewer'"
+    {{- include "platform.valuesSource" . | nindent 4 }}
+{{- end }}

@@ -1,0 +1,21 @@
+{{- if .Values.addons.envoyGateway.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  {{- include "platform.meta" (dict "name" "envoy-gateway" "wave" 0) | nindent 2 }}
+spec:
+  project: platform
+  destination:
+    {{- include "platform.destination" "envoy-gateway-system" | nindent 4 }}
+  syncPolicy:
+    {{- include "platform.syncPolicy" . | nindent 4 }}
+  sources:
+    - repoURL: docker.io/envoyproxy   # OCI registry (repository declared in values/argocd.yaml)
+      chart: gateway-helm
+      targetRevision: {{ .Values.addons.envoyGateway.version }}
+      helm:
+        releaseName: eg
+        valueFiles:
+          - $values/platform/values/envoy-gateway.yaml
+    {{- include "platform.valuesSource" . | nindent 4 }}
+{{- end }}

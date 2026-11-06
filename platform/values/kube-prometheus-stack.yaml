@@ -1,0 +1,79 @@
+fullnameOverride: prometheus
+kube-state-metrics:
+  fullnameOverride: kube-state-metrics
+prometheus-node-exporter:
+  fullnameOverride: node-exporter
+
+prometheus:
+  prometheusSpec:
+    replicas: 2
+    retention: 15d
+    retentionSize: 18GB
+    # Pick up ServiceMonitors/PodMonitors/rules from every namespace and chart
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    resources:
+      requests: { cpu: 200m, memory: 1Gi }
+      limits:   { memory: 3Gi }
+    storageSpec:
+      volumeClaimTemplate:
+        metadata:
+          annotations:
+            resize.topolvm.io/storage_limit: 100Gi
+            resize.topolvm.io/threshold: "20%"
+        spec:
+          storageClassName: standard-autoresize
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests: { storage: 20Gi }
+
+alertmanager:
+  alertmanagerSpec:
+    replicas: 2
+    resources:
+      requests: { cpu: 10m, memory: 64Mi }
+      limits:   { memory: 256Mi }
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: standard-autoresize
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests: { storage: 10Gi }
+
+grafana:
+  admin:
+    existingSecret: grafana-secrets   # synced from Secret Manager
+    userKey: admin-user
+    passwordKey: admin-password
+  envValueFrom:
+    GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET:
+      secretKeyRef:
+        name: grafana-secrets
+        key: oauth-client-secret
+  grafana.ini:
+    auth:
+      disable_login_form: true        # SSO only
+    users:
+      allow_sign_up: false
+    analytics:
+      reporting_enabled: false
+      check_for_updates: false
+  persistence:
+    enabled: true
+    storageClassName: standard-autoresize
+    size: 10Gi
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits:   { memory: 512Mi }
+
+# ---- GKE specifics ----
+# Managed control plane is not scrapable; Dataplane V2 replaces kube-proxy; GKE uses kube-dns.
+kubeControllerManager: { enabled: false }
+kubeScheduler:         { enabled: false }
+kubeEtcd:              { enabled: false }
+kubeProxy:             { enabled: false }
+coreDns:               { enabled: false }
+kubeDns:               { enabled: true }

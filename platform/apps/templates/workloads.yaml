@@ -1,0 +1,49 @@
+{{- if .Values.workloads.enabled }}
+# Every folder workloads/<app>/overlays/<environment> becomes an Application
+# in namespace <app>, in the restricted "workloads" project.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: workloads
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: {{ .Values.repoURL }}
+        revision: {{ .Values.targetRevision }}
+        directories:
+          - path: workloads/*/overlays/{{ .Values.cluster.environment }}
+  template:
+    metadata:
+      name: '{{`{{ index .path.segments 1 }}`}}'
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: workloads
+      source:
+        repoURL: {{ .Values.repoURL }}
+        targetRevision: {{ .Values.targetRevision }}
+        path: '{{`{{ .path.path }}`}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{`{{ index .path.segments 1 }}`}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+        managedNamespaceMetadata:
+          labels:
+            owner: '{{`{{ index .path.segments 1 }}`}}'
+        retry:
+          limit: 5
+          backoff:
+            duration: 30s
+            factor: 2
+            maxDuration: 5m
+{{- end }}
