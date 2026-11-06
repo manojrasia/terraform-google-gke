@@ -1,0 +1,17 @@
+fullnameOverride: blackbox-exporter
+replicas: 2
+serviceMonitor:
+  selfMonitor:
+    enabled: true
+  enabled: true
+  defaults:
+    module: http_2xx
+    interval: 30s
+  # Health checks for the stack; results show up as probe_success in Prometheus
+  targets:
+    - name: argocd
+      url: http://argocd-server.argocd.svc.cluster.local/healthz
+    - name: dex
+      url: http://dex.auth.svc.cluster.local/dex/healthz
+    - name: grafana
+      url: http://kube-prometheus-stack-grafana.monitoring.svc.cluster.local/api/health

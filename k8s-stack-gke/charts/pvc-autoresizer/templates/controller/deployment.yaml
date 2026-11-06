@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "pvc-autoresizer.fullname" . }}-controller
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "pvc-autoresizer.labels" . | nindent 4 }}
+  {{- if .Values.controller.annotations}}
+  annotations:
+    {{- toYaml .Values.controller.annotations | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "pvc-autoresizer.selectorLabels" . | nindent 6 }}
+  replicas: {{ .Values.controller.replicas }}
+  template:
+    metadata:
+      labels:
+        {{- include "pvc-autoresizer.labels" . | nindent 8 }}
+        {{- with .Values.controller.podLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- if .Values.controller.podAnnotations}}
+      annotations:
+        {{- toYaml .Values.controller.podAnnotations | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ template "pvc-autoresizer.serviceAccountName" . }}
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.controller.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ . }}
+      {{- end }}
+      containers:
+        - name: pvc-autoresizer
+          command:
+            - /pvc-autoresizer
+          args:
+            - --prometheus-url={{ .Values.controller.args.prometheusURL }}
+            - --interval={{ .Values.controller.args.interval }}
+          {{- if .Values.controller.args.useK8sMetricsApi }}
+            - --use-k8s-metrics-api={{ .Values.controller.args.useK8sMetricsApi }}
+          {{- end }}
+          {{- if .Values.controller.args.namespaces }}
+            - --namespaces={{ join "," .Values.controller.args.namespaces }}
+          {{- end }}
+          {{- with .Values.controller.args.additionalArgs -}}
+            {{ toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if not .Values.webhook.pvcMutatingWebhook.enabled }}
+            - --pvc-mutating-webhook-enabled=false
+          {{- end}}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.reference }}"
+          {{- with .Values.image.pullPolicy }}
+          imagePullPolicy: {{ . }}
+          {{- end }}
+          {{- with .Values.controller.resources }}
+          resources: {{ toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - containerPort: 9443
+              name: webhook
+              protocol: TCP
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+          {{- if .Values.webhook.pvcMutatingWebhook.enabled }}
+          volumeMounts:
+            - name: certs
+              mountPath: /certs
+          {{- end }}
+          securityContext:
+            {{- toYaml .Values.controller.securityContext | nindent 12 }}
+    {{- with .Values.controller.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.controller.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      {{- if .Values.webhook.pvcMutatingWebhook.enabled }}
+      volumes:
+        - name: certs
+          secret:
+            defaultMode: 420
+            secretName: {{ template "pvc-autoresizer.fullname" . }}-controller
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.controller.podSecurityContext | nindent 8 }}
+    {{- with .Values.controller.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.controller.priorityClassName }}
+      priorityClassName: {{ . }}
+    {{- end }}

@@ -1,0 +1,56 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: dex, namespace: auth }
+spec:
+  parentRefs: [{ name: main, namespace: envoy-gateway-system }]
+  hostnames: ["dex.__DOMAIN__"]
+  rules:
+    - backendRefs: [{ name: dex, port: 80 }]
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: prometheus, namespace: auth }
+spec:
+  parentRefs: [{ name: main, namespace: envoy-gateway-system }]
+  hostnames: ["prometheus.__DOMAIN__"]
+  rules:
+    # Goes through oauth2-proxy (Dex login), which forwards to Prometheus
+    - backendRefs: [{ name: oauth2-proxy, port: 80 }]
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: grafana, namespace: monitoring }
+spec:
+  parentRefs: [{ name: main, namespace: envoy-gateway-system }]
+  hostnames: ["grafana.__DOMAIN__"]
+  rules:
+    - backendRefs: [{ name: kube-prometheus-stack-grafana, port: 80 }]
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: argocd, namespace: argocd }
+spec:
+  parentRefs: [{ name: main, namespace: envoy-gateway-system }]
+  hostnames: ["argocd.__DOMAIN__"]
+  rules:
+    - backendRefs: [{ name: argocd-server, port: 80 }]
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: alertmanager, namespace: auth }
+spec:
+  parentRefs: [{ name: main, namespace: envoy-gateway-system }]
+  hostnames: ["alertmanager.__DOMAIN__"]
+  rules:
+    # Goes through the second oauth2-proxy (Dex login), which forwards to Alertmanager
+    - backendRefs: [{ name: oauth2-proxy-alertmanager, port: 80 }]
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: gpm, namespace: auth }
+spec:
+  parentRefs: [{ name: main, namespace: envoy-gateway-system }]
+  hostnames: ["gpm.__DOMAIN__"]
+  rules:
+    # Dex login via oauth2-proxy-gpm, then Gatekeeper Policy Manager
+    - backendRefs: [{ name: oauth2-proxy-gpm, port: 80 }]

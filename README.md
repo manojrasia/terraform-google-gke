@@ -84,3 +84,20 @@ The active account shown should be `app-gsa@<PROJECT_ID>.iam.gserviceaccount.com
 ## Destroy
 
 `deletion_protection = true` by default. Set it to `false`, `terraform apply`, then `terraform destroy`.
+
+P=boreal-conquest-421512
+ME=$(gcloud config get-value account)
+
+gcloud projects add-iam-policy-binding $P --member="user:$ME" --role="roles/iap.tunnelResourceAccessor"
+gcloud projects add-iam-policy-binding $P --member="user:$ME" --role="roles/compute.osAdminLogin"
+
+# Make sure the tools are installed (the startup script normally does this)
+sudo apt-get install -y kubectl google-cloud-cli-gke-gcloud-auth-plugin
+
+gcloud container clusters get-credentials private-gke-cluster \
+  --region asia-south1 \
+  --project boreal-conquest-421512 \
+  --internal-ip
+
+kubectl get nodes
+

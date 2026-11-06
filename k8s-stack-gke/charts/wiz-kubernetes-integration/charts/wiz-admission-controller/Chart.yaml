@@ -1,0 +1,10 @@
+apiVersion: v2
+appVersion: "2.12"
+dependencies:
+- name: wiz-common
+  repository: https://wiz-sec.github.io/charts
+  version: 0.1.9
+description: Wiz admission controller
+name: wiz-admission-controller
+type: application
+version: 4.0.4

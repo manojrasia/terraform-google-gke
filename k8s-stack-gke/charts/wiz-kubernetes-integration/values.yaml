@@ -1,0 +1,150 @@
+# Wiz Kubernetes Integration
+
+# Global values to override all chart values from external sources.
+global:
+  nameOverride: "" # Override the release’s name.
+  fullnameOverride: "" # Override the release’s full name.
+  commonLabels: {} # Labels applied on all the resources (not used for selection)
+
+  # Wiz Service Account used to authenticate to Wiz.
+  wizApiToken:
+    clientId: "" # Client ID of the Wiz Service Account.
+    clientToken: "" # Client secret of the Wiz Service Account.
+    clientEndpoint: "" # Defaults to commercial.
+                       # If `global.isFedRamp` is `true`, this field gets automatically set to `fedramp`.
+
+    secret:
+      # Should a Secret be created by the chart or not.
+      # Set this to false if you wish to create the Secret yourself or using another tool.
+      # The Secret should contain clientId for the ID and clientToken for the token.
+      create: true
+      # Annotations to add to the secret.
+      annotations: {}
+      # The name of the Wiz Service Account Secret.
+      name: "wiz-api-token"
+
+    # Set the `wizApiTokensVolumeMount` below to a non-empty string if you are passing the Wiz service account
+    # token (client id and client token) via mounts, e.g. when using the Vault operator to inject secrets to Pods.
+    # In this case you are responsible for creating the mounts.
+    # You must also set `.Values.customVolumes` and `.Values.customVolumeMounts`.
+    # The mounts must have at least these 2 files:
+    # clientId - with this content: <wiz service account id>
+    # clientToken - with this content: <wiz service account token>
+    #
+    # e.g. wizApiTokensVolumeMount: "/api-client/"
+    #      and this is how the mount looks like on the file system:
+    #      /api-client/clientId
+    #      /api-client/clientToken
+    #
+    # Implies `secret.enabled: false`.
+    wizApiTokensVolumeMount: ""
+
+  # Redirect HTTP and/or HTTPS traffic through a proxy.
+  httpProxyConfiguration:
+    enabled: false # Should the components use a proxy.
+
+    # Should a Secret be created by the chart or not.
+    # Set this to false if you wish to create the Secret yourself or using another tool.
+    # The Secret should contain httpProxy, httpsProxy, noProxyAddress, caCertificate and clientCertificate.
+    create: true
+    secretName: "wiz-proxy" # The name of the proxy Secret.
+    annotations: {} # Annotations to be set on the secret
+
+    httpProxy: "" # URL to use as a proxy for outbound HTTP traffic.
+    httpsProxy: "" # URL to use as a proxy for outbound HTTPS traffic.
+    noProxyAddress: # Comma or space-separated list of machine or domain names. Note: This does not affect the Sensor.
+
+    # Proxy CA certificate in PEM format. This is required for TLS intercept proxies
+    # This value is currently only used by the wiz sensor.
+    caCertificate: ""
+
+    # (optional) Proxy client certificate in PEM format. This is required for client certificate authentication.
+    # The file should contain a certificate and a private key in PEM format.
+    clientCertificate: ""
+
+  image:
+    registry: "" # Registry to get the container images from.
+    pullPolicy: "" # Container image pull policy. One of Always, Never, IfNotPresent.
+  imagePullSecrets: [] # Secrets for container image registry keys as described in https://kubernetes.io/docs/concepts/containers/images/#referring-to-an-imagepullsecrets-on-a-pod
+
+  podAnnotations: {} # Annotations to add to the components Pods.
+
+  podCustomEnvironmentVariables: [] # Additional environment variables to add to the components Pods as pairs “name”, “value”.
+  customVolumes: [] # Additional volumes to add to the components Pods
+  customVolumeMounts: [] # Additional volume mounts to add to the components Pods
+
+  nodeSelector: {} # custom assignment to nodes
+  tolerations: [] # custom tolerations
+  clusterExternalId: "" # Required for OKE clusters - specify the cluster's OCID
+  subscriptionExternalId: "" # Optional. Used to associate the installation with a Subscription if none can be obtained from IMDS (e.g. on-prem)
+  clusterTags: {} # Optional. List of key: value tags to be added to KubernetesCluster object associated with this installation
+  subscriptionTags: {} # Optional. List of key: value tags to be added to Subscription object associated with this installation
+  clusterDisplayName: "" # Optional. Name to use for the cluster's sensor and connector deployments. If not set, will
+
+  # Wiz Helm Charts process the security contexts
+  # in the following order:
+  # 1. Pod security context
+  #    lowPrivilegePodSecurityPolicy -> podSecurityContext
+  # 2. Containers security context
+  #    lowPrivilegeSecurityPolicy -> securityContext
+  #
+  # Populating the following overrides lowPrivilegeSecurityPolicy to your user-supplied values.yaml
+  # allows you to customize and override the defaults
+  # (useful for e.g. OpenShift installations that automatically
+  #  mutate the Pod and use the first UID and first GID from
+  #  the allowed range to run the Pod).
+  #
+  # lowPrivilegePodSecurityPolicy: {}
+  # lowPrivilegeSecurityPolicy: {}
+
+  # Set to true to use FedRamp endpoints and FIPS-compliant images.
+  isFedRamp: false
+
+# Wiz Kubernetes Connector
+# Configuration values for the wiz-kubernetes-connector dependency
+# ref: https://github.com/wiz-sec/charts/blob/master/wiz-kubernetes-connector/values.yaml
+#
+wiz-kubernetes-connector:
+  enabled: false
+  wizApiToken:
+    secret:
+      create: false # Secret created by wiz-kubernetes-integration.
+  httpProxyConfiguration:
+    create: false # Secret created by wiz-kubernetes-integration.
+
+# Wiz Admission Controller
+# Configuration values for the wiz-admission-controller dependency
+# ref: https://github.com/wiz-sec/charts/blob/master/wiz-admission-controller/values.yaml
+#
+wiz-admission-controller:
+  enabled: false
+  wizApiToken:
+    secret:
+      create: false # Secret created by wiz-kubernetes-integration.
+  httpProxyConfiguration:
+    create: false # Secret created by wiz-kubernetes-integration.
+
+# Wiz Sensor
+# Configuration values for the wiz-sensor dependency
+# ref: https://github.com/wiz-sec/charts/blob/master/wiz-sensor/values.yaml
+#
+wiz-sensor:
+  enabled: false
+  wizApiToken:
+    secret:
+      create: false # Secret created by wiz-kubernetes-integration.
+  httpProxyConfiguration:
+    create: false # Secret created by wiz-kubernetes-integration.
+  imagePullSecret:
+    # The default sensor registry requires a pull secret. Set to false
+    # if mirroring the image.
+    required: true
+    # set to false when using an existing secret
+    create: true
+
+    # This value is a must in order to pull the image from a private repository. We use helm
+    # to create a docker formatted json, encoded in base64.
+    # In case you want use an existing value (perhaps created via "kubectl create secret docker-registry ...")
+    # please mark "create" above as false
+    username: ""
+    password: ""

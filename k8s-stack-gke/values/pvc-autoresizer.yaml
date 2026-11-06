@@ -1,0 +1,8 @@
+controller:
+  replicas: 2
+  args:
+    prometheusURL: http://prometheus-prometheus.monitoring.svc:9090
+webhook:
+  certificate:
+    # Self-signed cert for the PVC webhook, so cert-manager isn't needed
+    generate: true

@@ -1,0 +1,23 @@
+dex:
+  enabled: false          # use the standalone Dex instead of Argo CD's built-in one
+configs:
+  params:
+    server.insecure: true # the gateway serves plain HTTP inside the VPC
+  cm:
+    url: http://argocd.__DOMAIN__
+    oidc.config: |
+      name: Dex
+      issuer: http://dex.__DOMAIN__/dex
+      clientID: argocd
+      clientSecret: argocd-dex-secret
+      requestedScopes: ["openid", "profile", "email"]
+  rbac:
+    policy.csv: |
+      g, admin@example.com, role:admin
+    scopes: "[email]"
+controller:
+  metrics: { enabled: true, serviceMonitor: { enabled: true } }
+server:
+  metrics: { enabled: true, serviceMonitor: { enabled: true } }
+repoServer:
+  metrics: { enabled: true, serviceMonitor: { enabled: true } }

@@ -1,0 +1,28 @@
+# enforcementAction: dryrun = report violations (audit) but never block.
+# Change to "deny" to enforce.
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: namespaces-must-have-owner
+spec:
+  enforcementAction: dryrun
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+    # GKE-managed namespaces can't be labelled by you
+    excludedNamespaces: ["kube-system", "kube-public", "kube-node-lease", "default", "gmp-public", "gmp-system", "gke-*"]
+  parameters:
+    labels: ["owner"]
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sPSPPrivilegedContainer
+metadata:
+  name: no-privileged-containers
+spec:
+  enforcementAction: dryrun
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    excludedNamespaces: ["kube-system", "wiz", "gmp-system", "gmp-public", "gke-*"]

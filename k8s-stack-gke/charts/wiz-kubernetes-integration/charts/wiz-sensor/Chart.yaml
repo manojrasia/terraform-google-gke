@@ -1,0 +1,10 @@
+annotations:
+  diskScanAppVersion: 1.1.68
+  windowsAppVersion: 1.0.12877
+apiVersion: v2
+appVersion: 1.0.12791
+description: Wiz Sensor helm chart
+home: https://www.wiz.io/
+name: wiz-sensor
+type: application
+version: 1.0.12913
