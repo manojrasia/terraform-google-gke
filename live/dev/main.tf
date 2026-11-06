@@ -35,7 +35,7 @@ module "cluster" {
   cluster_admins     = ["user:manoj1chaurasia2@gmail.com"]
   cluster_developers = []
 
-  deletion_protection = true
+  deletion_protection = false
   enable_bastion      = true
   enable_wiz          = false
   enable_slack_alerts = false
