@@ -174,3 +174,36 @@ kubectl -n envoy-gateway-system get svc         # wait until the LB service is g
   Encrypt), then `cookie_secure = true`.
 - **No default-deny NetworkPolicies** yet; add per namespace once traffic flows are known.
 - GitHub Actions are pinned to major versions; pin to commit SHAs for supply-chain hardening.
+
+
+Fix
+
+Run google-github-actions/auth@v3
+Created credentials file at "/home/runner/work/terraform-google-gke/terraform-google-gke/gha-creds-aa191fd072d93b05.json"
+Error: google-github-actions/auth failed with: failed to generate Google Cloud OAuth 2.0 Access Token for gha-terraform-apply@boreal-conquest-421512.iam.gserviceaccount.com: {
+  "error": {
+    "code": 403,
+    "message": "Permission 'iam.serviceAccounts.getAccessToken' denied on resource (or it may not exist). Remediate access with this Troubleshooter URL or share it with your administrator - https://console.cloud.google.com/iam-admin/troubleshooter/summary;errorId=CiQwMWExYjFmZS1kNWI1LTcwYmItYTUxZS0xNmZjYjgxMWU4ZTQSAA%3D%3D .",
+    "status": "PERMISSION_DENIED",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "IAM_PERMISSION_DENIED",
+        "domain": "iam.googleapis.com",
+        "metadata": {
+          "troubleshooter_url": "https://console.cloud.google.com/iam-admin/troubleshooter/summary;errorId=CiQwMWExYjFmZS1kNWI1LTcwYmItYTUxZS0xNmZjYjgxMWU4ZTQSAA%3D%3D",
+          "permission": "iam.serviceAccounts.getAccessToken",
+          "error_info_id": "CiQwMWExYjFmZS1kNWI1LTcwYmItYTUxZS0xNmZjYjgxMWU4ZTQSAA=="
+        }
+      }
+    ]
+  }
+}
+
+resource "google_service_account_iam_member" "apply_wif" {
+  service_account_id = google_service_account.apply.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.ref/refs/heads/main"
+}
+
+correctly update it

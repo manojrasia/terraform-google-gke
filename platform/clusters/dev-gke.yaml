@@ -20,7 +20,7 @@ auth:
   admins:
     - manoj1chaurasia2@gmail.com
   viewers: []
-
+    - manoj1chaurasia2@gmail.com
 alerting:
   slack:
     enabled: false                 # also set enable_slack_alerts = true in Terraform
