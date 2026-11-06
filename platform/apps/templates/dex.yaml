@@ -1,0 +1,56 @@
+{{- if .Values.addons.dex.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  {{- include "platform.meta" (dict "name" "dex" "wave" 3) | nindent 2 }}
+spec:
+  project: platform
+  destination:
+    {{- include "platform.destination" "auth" | nindent 4 }}
+  syncPolicy:
+    {{- include "platform.syncPolicy" . | nindent 4 }}
+  sources:
+    - repoURL: https://charts.dexidp.io
+      chart: dex
+      targetRevision: {{ .Values.addons.dex.version }}
+      helm:
+        releaseName: dex
+        valueFiles:
+          - $values/platform/values/dex.yaml
+        valuesObject:
+          config:
+            issuer: {{ include "platform.url" (dict "host" "dex" "root" .) }}/dex
+            connectors:
+              - type: github
+                id: github
+                name: GitHub
+                config:
+                  clientID: {{ required "auth.github.clientID is required" .Values.auth.github.clientID | quote }}
+                  clientSecret: $GITHUB_CLIENT_SECRET
+                  redirectURI: {{ include "platform.url" (dict "host" "dex" "root" .) }}/dex/callback
+                  {{- with .Values.auth.github.orgs }}
+                  orgs:
+                    {{- range . }}
+                    - name: {{ . }}
+                    {{- end }}
+                  {{- end }}
+            staticClients:
+              - id: argocd
+                name: Argo CD
+                secretEnv: ARGOCD_CLIENT_SECRET
+                redirectURIs:
+                  - {{ include "platform.url" (dict "host" "argocd" "root" .) }}/auth/callback
+              - id: grafana
+                name: Grafana
+                secretEnv: GRAFANA_CLIENT_SECRET
+                redirectURIs:
+                  - {{ include "platform.url" (dict "host" "grafana" "root" .) }}/login/generic_oauth
+              - id: oauth2-proxy
+                name: Platform UIs
+                secretEnv: OAUTH2_PROXY_CLIENT_SECRET
+                redirectURIs:
+                  {{- range list "prometheus" "alertmanager" "gpm" }}
+                  - {{ include "platform.url" (dict "host" . "root" $) }}/oauth2/callback
+                  {{- end }}
+    {{- include "platform.valuesSource" . | nindent 4 }}
+{{- end }}

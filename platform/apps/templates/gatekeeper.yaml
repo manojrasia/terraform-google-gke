@@ -1,0 +1,40 @@
+{{- if .Values.addons.gatekeeper.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  {{- include "platform.meta" (dict "name" "gatekeeper" "wave" 4) | nindent 2 }}
+spec:
+  project: platform
+  destination:
+    {{- include "platform.destination" "gatekeeper-system" | nindent 4 }}
+  syncPolicy:
+    {{- include "platform.syncPolicy" . | nindent 4 }}
+  sources:
+    - repoURL: https://open-policy-agent.github.io/gatekeeper/charts
+      chart: gatekeeper
+      targetRevision: {{ .Values.addons.gatekeeper.version }}
+      helm:
+        releaseName: gatekeeper
+        valueFiles:
+          - $values/platform/values/gatekeeper.yaml
+    {{- include "platform.valuesSource" . | nindent 4 }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  {{- include "platform.meta" (dict "name" "policies" "wave" 5) | nindent 2 }}
+spec:
+  project: platform
+  destination:
+    {{- include "platform.destination" "gatekeeper-system" | nindent 4 }}
+  syncPolicy:
+    {{- include "platform.syncPolicy" . | nindent 4 }}
+  source:
+    repoURL: {{ .Values.repoURL }}
+    targetRevision: {{ .Values.targetRevision }}
+    path: platform/charts/policies
+    helm:
+      releaseName: policies
+      valuesObject:
+        enforcementAction: {{ .Values.policies.enforcementAction }}
+{{- end }}

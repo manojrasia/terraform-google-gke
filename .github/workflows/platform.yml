@@ -1,0 +1,52 @@
+name: platform
+
+on:
+  pull_request:
+    paths:
+      - "platform/**"
+      - "workloads/**"
+      - ".github/workflows/platform.yml"
+
+permissions:
+  contents: read
+
+env:
+  KUBECONFORM_VERSION: v0.7.0
+  SCHEMAS: https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
+
+jobs:
+  render-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: install kubeconform
+        run: |
+          curl -sSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            | sudo tar xz -C /usr/local/bin kubeconform
+
+      - name: render platform for every cluster
+        run: |
+          mkdir -p out
+          for f in platform/clusters/*.yaml; do
+            c=$(basename "$f" .yaml)
+            helm lint platform/apps -f "$f"
+            helm template root platform/apps -f "$f" > "out/apps-$c.yaml"
+          done
+          helm template pc platform/charts/platform-config \
+            --set cluster.name=ci --set cluster.projectId=ci --set cluster.domain=ci.internal \
+            --set alerting.slack.enabled=true --set wiz.enabled=true > out/platform-config.yaml
+          helm template pol platform/charts/policies > out/policies.yaml
+
+      - name: render workloads
+        run: |
+          for o in workloads/*/overlays/*/; do
+            kubectl kustomize "$o" > "out/wl-$(echo "$o" | tr / -).yaml"
+          done
+
+      - name: kubeconform
+        run: |
+          kubeconform -strict -summary \
+            -schema-location default -schema-location "$SCHEMAS" \
+            -skip K8sRequiredLabels,K8sPrivilegedContainer,K8sContainerResources,K8sDisallowedTags \
+            out/

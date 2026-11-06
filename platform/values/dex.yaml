@@ -1,0 +1,26 @@
+replicaCount: 2
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+envFrom:
+  - secretRef:
+      name: dex-secrets   # GITHUB_CLIENT_SECRET + client secrets, synced from Secret Manager
+service:
+  ports:
+    http:
+      port: 80
+resources:
+  requests: { cpu: 20m, memory: 64Mi }
+  limits:   { memory: 128Mi }
+config:
+  storage:
+    type: kubernetes      # survives restarts, supports multiple replicas
+    config:
+      inCluster: true
+  enablePasswordDB: false # no local users: GitHub only
+  oauth2:
+    skipApprovalScreen: true
+  expiry:
+    idTokens: 1h
+    refreshTokens:
+      validIfNotUsedFor: 168h

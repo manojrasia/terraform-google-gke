@@ -1,0 +1,19 @@
+replicas: 3
+audit:
+  replicas: 1
+  auditInterval: 60
+controllerManager:
+  exemptNamespaces:
+    - kube-system
+    - gmp-system
+    - gmp-public
+  exemptNamespacePrefixes:
+    - gke-
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { memory: 512Mi }
+pdb:
+  controllerManager:
+    minAvailable: 1
+upgradeCRDs:
+  enabled: false     # Argo CD applies the CRDs itself

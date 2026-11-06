@@ -1,0 +1,5 @@
+apiVersion: v2
+name: platform-apps
+description: App-of-apps - every platform add-on as an Argo CD Application
+type: application
+version: 1.0.0

@@ -1,0 +1,9 @@
+controller:
+  replicas: 2
+  args:
+    prometheusURL: http://prometheus-prometheus.monitoring.svc:9090
+webhook:
+  certificate:
+    generate: true   # self-signed webhook cert, no cert-manager needed
+podMonitor:
+  enabled: true

@@ -1,0 +1,21 @@
+{{- if .Values.addons.gatekeeperPolicyManager.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  {{- include "platform.meta" (dict "name" "gatekeeper-policy-manager" "wave" 5) | nindent 2 }}
+spec:
+  project: platform
+  destination:
+    {{- include "platform.destination" "gatekeeper-system" | nindent 4 }}
+  syncPolicy:
+    {{- include "platform.syncPolicy" . | nindent 4 }}
+  sources:
+    - repoURL: https://sighupio.github.io/gatekeeper-policy-manager
+      chart: gatekeeper-policy-manager
+      targetRevision: {{ .Values.addons.gatekeeperPolicyManager.version }}
+      helm:
+        releaseName: gatekeeper-policy-manager
+        valueFiles:
+          - $values/platform/values/gatekeeper-policy-manager.yaml
+    {{- include "platform.valuesSource" . | nindent 4 }}
+{{- end }}

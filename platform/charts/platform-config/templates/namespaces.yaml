@@ -1,0 +1,15 @@
+{{- /* Namespaces that receive synced secrets before their app exists.
+       Delete=false: removing this app never deletes the namespaces (and their data). */}}
+{{- $ns := list "auth" "monitoring" "external-dns" "gatekeeper-system" }}
+{{- if .Values.wiz.enabled }}{{ $ns = append $ns "wiz" }}{{ end }}
+{{- range $ns }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ . }}
+  labels:
+    owner: platform
+  annotations:
+    argocd.argoproj.io/sync-options: Delete=false
+{{- end }}
