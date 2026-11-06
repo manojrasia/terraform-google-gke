@@ -68,6 +68,7 @@ jobs:
             const t = await core.getIDToken('https://iam.googleapis.com');
             const c = JSON.parse(Buffer.from(t.split('.')[1], 'base64').toString());
             core.info(`sub=${c.sub}  repository=${c.repository}  ref=${c.ref}`);
+
             
       - uses: google-github-actions/auth@v2
         with:
