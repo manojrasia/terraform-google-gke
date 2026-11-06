@@ -36,3 +36,6 @@ labels = {
   env        = "dev"
   managed-by = "terraform"
 }
+
+disk_type    = "pd-standard"
+disk_size_gb = 50
