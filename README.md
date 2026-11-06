@@ -39,6 +39,13 @@ cp terraform.tfvars.example terraform.tfvars   # edit project_id etc.
 terraform init
 terraform plan -out tfplan
 terraform apply tfplan
+
+gcloud auth login
+gcloud auth application-default login
+gcloud config set project boreal-conquest-421512
+cp terraform.tfvars.example terraform.tfvars   # edit project_id
+terraform init && terraform plan -out tfplan && terraform apply tfplan
+
 ```
 
 Cluster creation takes ~10–15 minutes.

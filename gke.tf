@@ -94,6 +94,8 @@ resource "google_container_cluster" "primary" {
   node_config {
     service_account = google_service_account.gke_nodes.email
     oauth_scopes    = ["https://www.googleapis.com/auth/cloud-platform"]
+    disk_size_gb    = 20
+    disk_type       = "pd-standard"
   }
 
   lifecycle {
