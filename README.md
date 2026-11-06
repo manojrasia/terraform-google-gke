@@ -207,3 +207,12 @@ resource "google_service_account_iam_member" "apply_wif" {
 }
 
 correctly update it
+
+
+--------------
+
+0s
+Run scripts/bootstrap-argocd.sh "platform/clusters/dev-gke.yaml"
+/home/runner/work/_temp/6644ff76-9c5f-4ea9-bcfa-97e22c0b04cf.sh: line 1: scripts/bootstrap-argocd.sh: Permission denied
+Error: Process completed with exit code 126.
+
