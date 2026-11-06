@@ -24,11 +24,11 @@ module "cluster" {
 
   node_pools = {
     general = {
-      machine_type = "e2-standard-4"
-      min_nodes    = 1 # per zone -> 3 nodes minimum
-      max_nodes    = 2
+      machine_type = "e2-standard-2"   # 2 vCPU / 8 GB
+      min_nodes    = 1                 # per zone -> 3 nodes = 6 vCPU
+      max_nodes    = 2                 # up to 12 vCPU
       disk_size_gb = 50
-      disk_type    = "pd-standard" # dev: keeps SSD quota free
+      disk_type    = "pd-standard"
     }
   }
 

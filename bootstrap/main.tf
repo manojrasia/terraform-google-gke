@@ -151,8 +151,7 @@ resource "google_service_account_iam_member" "plan_wif" {
 
 # Only jobs running in an approved GitHub Environment may use the APPLY account
 resource "google_service_account_iam_member" "apply_wif" {
-  for_each           = toset(var.github_environments)
   service_account_id = google_service_account.apply.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principal://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/subject/repo:${var.github_repository}:environment:${each.value}"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.ref/refs/heads/main"
 }
