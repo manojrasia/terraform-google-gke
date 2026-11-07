@@ -17,6 +17,8 @@ spec:
       valuesObject:
         cluster:
           {{- toYaml .Values.cluster | nindent 10 }}
+        ingress:
+          {{- toYaml .Values.ingress | nindent 10 }}
         alerting:
           {{- toYaml .Values.alerting | nindent 10 }}
         wiz:

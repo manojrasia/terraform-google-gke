@@ -128,3 +128,44 @@ variable "enable_slack_alerts" {
   type    = bool
   default = false
 }
+
+# ---------- Exposure (one switch) ----------
+variable "ingress_exposure" {
+  description = <<-EOT
+    How the platform UIs and workloads are reached:
+      internal = internal LB + private DNS zone; reach it through the bastion (SOCKS proxy)
+      public   = public LB with a static IP; open the URLs straight from your laptop
+    Changing it is safe at any time: both IPs stay reserved, Argo CD switches the gateway.
+  EOT
+  type        = string
+  default     = "internal"
+  validation {
+    condition     = contains(["internal", "public"], var.ingress_exposure)
+    error_message = "ingress_exposure must be \"internal\" or \"public\"."
+  }
+}
+
+variable "public_domain" {
+  description = <<-EOT
+    Only for ingress_exposure = "public". Empty = no DNS needed: hostnames use sslip.io
+    (e.g. argocd.34-93-10-20.sslip.io resolves to 34.93.10.20). Set a domain you own
+    (e.g. dev.example.com) to get a public Cloud DNS zone managed by ExternalDNS instead.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "public_ingress_allowed_cidrs" {
+  description = "Only for ingress_exposure = \"public\": client CIDRs allowed to reach the public LB. The cluster's NAT IP is always added."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
+variable "public_control_plane" {
+  description = <<-EOT
+    true = control plane also gets a public IP endpoint (restricted to master_authorized_networks).
+    Usually not needed: the IAM-protected DNS endpoint already lets kubectl work from anywhere.
+  EOT
+  type        = bool
+  default     = false
+}

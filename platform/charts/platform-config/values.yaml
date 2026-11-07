@@ -3,6 +3,10 @@ cluster:
   name: ""
   projectId: ""
   domain: ""
+ingress:
+  exposure: internal
+  publicIP: ""
+  sourceRanges: []
 alerting:
   slack:
     enabled: false

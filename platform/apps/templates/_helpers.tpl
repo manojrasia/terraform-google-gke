@@ -22,11 +22,11 @@ managedNamespaceMetadata:
   labels:
     owner: platform
 retry:
-  limit: 10
+  limit: -1          # never give up: dependencies (CRDs, secrets, other apps) arrive eventually
   backoff:
-    duration: 30s
+    duration: 20s
     factor: 2
-    maxDuration: 10m
+    maxDuration: 3m
 {{- end }}
 
 {{- define "platform.destination" -}}
@@ -42,7 +42,7 @@ namespace: {{ . }}
 {{- end }}
 
 {{- define "platform.url" -}}
-http://{{ .host }}.{{ .root.Values.cluster.domain }}
+http://{{ .host }}.{{ required "cluster.domain is set by Terraform (platform_values) via scripts/bootstrap-argocd.sh" .root.Values.cluster.domain }}
 {{- end }}
 
 {{/* JMESPath list literal: ['a@x', 'b@y'] */}}

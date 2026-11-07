@@ -18,8 +18,8 @@ jobs:
   render-and-validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: azure/setup-helm@v5
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
       - name: install kubeconform
         run: |
           curl -sSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
@@ -28,14 +28,21 @@ jobs:
       - name: render platform for every cluster
         run: |
           mkdir -p out
+          # The domain/exposure come from Terraform at runtime; CI checks both modes
+          INTERNAL="--set cluster.domain=ci.internal --set ingress.exposure=internal"
+          PUBLIC="--set cluster.domain=1-2-3-4.sslip.io --set ingress.exposure=public --set ingress.publicIP=1.2.3.4 --set ingress.sourceRanges={0.0.0.0/0} --set dns.managed=false"
           for f in platform/clusters/*.yaml; do
             c=$(basename "$f" .yaml)
-            helm lint platform/apps -f "$f"
-            helm template root platform/apps -f "$f" > "out/apps-$c.yaml"
+            for mode in INTERNAL PUBLIC; do
+              helm lint platform/apps -f "$f" ${!mode}
+              helm template root platform/apps -f "$f" ${!mode} > "out/apps-$c-$mode.yaml"
+            done
           done
-          helm template pc platform/charts/platform-config \
-            --set cluster.name=ci --set cluster.projectId=ci --set cluster.domain=ci.internal \
-            --set alerting.slack.enabled=true --set wiz.enabled=true > out/platform-config.yaml
+          for mode in INTERNAL PUBLIC; do
+            helm template pc platform/charts/platform-config ${!mode} \
+              --set cluster.name=ci --set cluster.projectId=ci \
+              --set alerting.slack.enabled=true --set wiz.enabled=true > "out/platform-config-$mode.yaml"
+          done
           helm template pol platform/charts/policies > out/policies.yaml
 
       - name: render workloads

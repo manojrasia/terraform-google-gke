@@ -1,4 +1,4 @@
-{{- if .Values.addons.externalDns.enabled }}
+{{- if and .Values.addons.externalDns.enabled .Values.dns.managed }}
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -23,7 +23,7 @@ spec:
           txtOwnerId: {{ .Values.cluster.name }}
           extraArgs:
             - --google-project={{ .Values.cluster.projectId }}
-            - --google-zone-visibility=private
+            - --google-zone-visibility={{ .Values.dns.visibility }}
           serviceAccount:
             name: external-dns
             annotations:

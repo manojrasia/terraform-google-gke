@@ -1,6 +1,6 @@
 # GKE platform (private cluster + GitOps)
 
-Private, regional GKE clusters in `asia-south1`, built with Terraform from GitHub
+Regional GKE clusters with private nodes in `asia-south1`, built with Terraform from GitHub
 Actions (Workload Identity Federation, no keys), with every add-on managed by
 Argo CD from this repo. Users log in with **GitHub** through Dex.
 
@@ -28,10 +28,11 @@ scripts/bootstrap-argocd.sh
 2. The same CI job runs `scripts/bootstrap-argocd.sh` **once**: it installs Argo
    CD and creates the `root` Application. CI reaches the private control plane
    through GKE's **IAM-protected DNS endpoint** - no bastion or public IP.
-3. Argo CD installs everything else from Git in order (sync waves):
-   External Secrets + Envoy Gateway → gateway/routes/secret sync → ExternalDNS +
-   Prometheus/Grafana → Dex, autoresizer, blackbox → oauth2-proxy, Argo CD
-   itself, Gatekeeper → policies, Policy Manager, Wiz → your `workloads/`.
+3. Argo CD installs everything else from Git. Sync waves only order **creation**;
+   no app waits for another to become Healthy. Every app retries forever (20s → 3m
+   backoff) until what it needs exists (CRDs, secrets, other services). One slow or
+   broken add-on therefore never blocks the rest - the whole platform converges
+   in ~10-15 minutes on a fresh cluster with no manual steps.
 4. Every later change is a pull request. Argo CD reverts manual `kubectl` edits.
 
 | Concern | How it's handled |
@@ -41,11 +42,40 @@ scripts/bootstrap-argocd.sh
 | Login | Dex + GitHub. No local users; Argo CD admin disabled; Grafana login form disabled |
 | Authorization | Only emails in `platform/clusters/<cluster>.yaml` get in (Argo CD RBAC, Grafana roles, oauth2-proxy allowlist) |
 | Cluster access | IAM (`cluster_admins`/`cluster_developers` in `live/<env>/main.tf`) over the DNS endpoint |
-| Network | Private nodes, no public endpoint, internal LB only, private DNS zone, Cloud NAT egress |
+| Network | Private nodes, Cloud NAT egress (static IP). UIs on an internal **or** public LB - one switch, see below |
 | Least privilege | Node SA minimal; ExternalDNS can edit only its zone; ESO can read only its cluster's secrets |
 | HA | Regional control plane, nodes in 3 zones, 2+ replicas and PDBs for every add-on, Argo CD HA Redis |
 | Policy | Gatekeeper: owner label, no privileged, requests/limits, no `latest` (start `dryrun`) |
 | Upgrades | Chart versions pinned in `platform/apps/values.yaml`; Dependabot for actions + providers |
+
+## Internal or public: one switch
+
+In `live/<env>/main.tf`:
+
+```hcl
+ingress_exposure = "public"     # or "internal"
+```
+
+| | `internal` | `public` |
+|---|---|---|
+| Load balancer | GCP internal LB (VPC only) | GCP external LB on a reserved static IP |
+| Hostnames | `argocd.dev.stack.internal` (private Cloud DNS + ExternalDNS) | `argocd.<ip-with-dashes>.sslip.io` - no DNS setup at all. Or set `public_domain` to a domain you own |
+| From your laptop | bastion SOCKS proxy (below) | just open the URL |
+| Who can connect | anyone in the VPC | `public_ingress_allowed_cidrs` (+ the cluster's NAT IP, added automatically) |
+
+Merge the change → CI runs `terraform apply`, then `bootstrap-argocd.sh` passes the
+Terraform outputs (`platform_values`: domain, exposure, IPs) to the `root` app,
+and Argo CD re-points the gateway, Dex, Grafana, oauth2-proxy and every app route.
+Nothing else to edit. Both static IPs stay reserved, so you can switch back and forth.
+
+**If the domain changes** (switching modes, or a new public IP after a full
+destroy), update the GitHub OAuth App with the values from
+`terraform output github_oauth_app`.
+
+**Control plane:** kubectl already works from anywhere via the IAM-protected DNS
+endpoint (`--dns-endpoint`). `public_control_plane = true` additionally enables
+the classic public IP endpoint, limited to `master_authorized_networks`.
+Nodes always stay private.
 
 ## First-time setup
 
@@ -72,12 +102,16 @@ Optional but recommended: move this state into the new bucket - uncomment the
 
 ### 3. Create the GitHub OAuth App (real users)
 
-GitHub → **Settings → Developer settings → OAuth Apps → New OAuth App**:
+The URLs depend on the domain, which Terraform picks. Get them once the first
+apply has run (the CI job prints them, or locally):
 
-| Field | Value |
-|---|---|
-| Homepage URL | `http://argocd.dev.stack.internal` |
-| Authorization callback URL | `http://dex.dev.stack.internal/dex/callback` |
+```bash
+terraform -chdir=live/dev output github_oauth_app
+```
+
+GitHub → **Settings → Developer settings → OAuth Apps → New OAuth App**, and use
+`homepage_url` and `callback_url` from that output. Until the app exists, everything
+except login works; Dex and oauth2-proxy simply retry.
 
 Put the **Client ID** in `platform/clusters/dev-gke.yaml` (`auth.github.clientID`)
 and list your users' GitHub emails under `auth.admins` / `auth.viewers`.
@@ -110,8 +144,15 @@ kubectl -n argocd get applications
 
 ## Using the UIs
 
-Everything is internal (`*.dev.stack.internal`). From your laptop, open a SOCKS
-proxy through the IAP bastion and point a browser at it:
+```bash
+terraform -chdir=live/dev output urls
+```
+
+**Public mode:** open those URLs directly. Nothing else needed.
+
+**Internal mode:** the IPs only exist inside the VPC (a hosts file entry on your
+laptop cannot work). Open a SOCKS proxy through the IAP bastion and point a
+browser at it; DNS is resolved on the bastion side, so the names just work:
 
 ```bash
 gcloud compute ssh dev-gke-bastion --zone asia-south1-a \
@@ -121,15 +162,27 @@ gcloud compute ssh dev-gke-bastion --zone asia-south1-a \
   --proxy-server="socks5://localhost:1080" --user-data-dir="/c/temp/gke-proxy"
 ```
 
-| URL | |
-|---|---|
-| http://argocd.dev.stack.internal | Argo CD |
-| http://grafana.dev.stack.internal | Grafana |
-| http://prometheus.dev.stack.internal | Prometheus |
-| http://alertmanager.dev.stack.internal | Alertmanager |
-| http://gpm.dev.stack.internal | Gatekeeper Policy Manager |
+Argo CD, Grafana, Prometheus, Alertmanager and Gatekeeper Policy Manager all sign
+in with GitHub. Apps under `workloads/` get `http://<app>.<domain>` automatically.
 
-All sign in with GitHub.
+## Troubleshooting
+
+```bash
+kubectl -n argocd get applications
+# why one app is not Synced/Healthy:
+kubectl -n argocd get application <app> -o jsonpath='{.status.operationState.message}{"\n"}{range .status.conditions[*]}{.type}: {.message}{"\n"}{end}'
+# which routes have no backend yet:
+kubectl get httproute -A -o custom-columns='NS:.metadata.namespace,NAME:.metadata.name,HOST:.spec.hostnames[0],RESOLVED:.status.parents[*].conditions[?(@.type=="ResolvedRefs")].status'
+kubectl -n envoy-gateway-system get svc        # EXTERNAL-IP = the gateway IP
+```
+
+| Symptom | Cause |
+|---|---|
+| `dex` / `oauth2-proxy-*` not Healthy | GitHub client secret not in Secret Manager yet (`kubectl -n auth get externalsecret` says so) |
+| Route works on `argocd`, 500 on others | that app is still installing - wait, it retries on its own |
+| Browser can't reach anything (internal) | use the SOCKS proxy; the internal LB IP is not routable from home |
+| Browser can't reach anything (public) | your IP is not in `public_ingress_allowed_cidrs` |
+| Login loops back / `redirect_uri` error | GitHub OAuth App URLs don't match `terraform output github_oauth_app` |
 
 ## Day 2
 
@@ -164,55 +217,14 @@ GKE-created LB resources block VPC deletion:
 ```bash
 kubectl -n argocd delete application root      # cascades to every add-on
 kubectl -n envoy-gateway-system get svc         # wait until the LB service is gone
-# then set deletion_protection = false in live/<env>/main.tf, apply, and destroy
+# dev has deletion_protection = false; then: terraform -chdir=live/dev destroy
 ```
 
 ## Known gaps (deliberate, for now)
 
-- **HTTP only.** Traffic stays inside the VPC, but logins are unencrypted on the
-  wire. Next step: cert-manager with an internal CA (or a real domain + Let's
-  Encrypt), then `cookie_secure = true`.
+- **HTTP only.** In `internal` mode traffic stays in the VPC. In `public` mode
+  logins and session cookies cross the internet unencrypted - keep
+  `public_ingress_allowed_cidrs` to your own IP. Next step: cert-manager +
+  Let's Encrypt (works with sslip.io or your domain), then `cookie_secure = true`.
 - **No default-deny NetworkPolicies** yet; add per namespace once traffic flows are known.
 - GitHub Actions are pinned to major versions; pin to commit SHAs for supply-chain hardening.
-
-
-Fix
-
-Run google-github-actions/auth@v3
-Created credentials file at "/home/runner/work/terraform-google-gke/terraform-google-gke/gha-creds-aa191fd072d93b05.json"
-Error: google-github-actions/auth failed with: failed to generate Google Cloud OAuth 2.0 Access Token for gha-terraform-apply@boreal-conquest-421512.iam.gserviceaccount.com: {
-  "error": {
-    "code": 403,
-    "message": "Permission 'iam.serviceAccounts.getAccessToken' denied on resource (or it may not exist). Remediate access with this Troubleshooter URL or share it with your administrator - https://console.cloud.google.com/iam-admin/troubleshooter/summary;errorId=CiQwMWExYjFmZS1kNWI1LTcwYmItYTUxZS0xNmZjYjgxMWU4ZTQSAA%3D%3D .",
-    "status": "PERMISSION_DENIED",
-    "details": [
-      {
-        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
-        "reason": "IAM_PERMISSION_DENIED",
-        "domain": "iam.googleapis.com",
-        "metadata": {
-          "troubleshooter_url": "https://console.cloud.google.com/iam-admin/troubleshooter/summary;errorId=CiQwMWExYjFmZS1kNWI1LTcwYmItYTUxZS0xNmZjYjgxMWU4ZTQSAA%3D%3D",
-          "permission": "iam.serviceAccounts.getAccessToken",
-          "error_info_id": "CiQwMWExYjFmZS1kNWI1LTcwYmItYTUxZS0xNmZjYjgxMWU4ZTQSAA=="
-        }
-      }
-    ]
-  }
-}
-
-resource "google_service_account_iam_member" "apply_wif" {
-  service_account_id = google_service_account.apply.name
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.ref/refs/heads/main"
-}
-
-correctly update it
-
-
---------------
-
-0s
-Run scripts/bootstrap-argocd.sh "platform/clusters/dev-gke.yaml"
-/home/runner/work/_temp/6644ff76-9c5f-4ea9-bcfa-97e22c0b04cf.sh: line 1: scripts/bootstrap-argocd.sh: Permission denied
-Error: Process completed with exit code 126.
-

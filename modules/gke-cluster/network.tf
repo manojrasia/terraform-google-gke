@@ -30,6 +30,26 @@ resource "google_compute_subnetwork" "nodes" {
   }
 }
 
+# ---------- Static IPs ----------
+# Fixed egress IP: allow-listed on the public LB, and handy for allow-lists elsewhere.
+resource "google_compute_address" "nat" {
+  name    = "${var.cluster_name}-nat"
+  project = var.project_id
+  region  = var.region
+  labels  = local.labels
+}
+
+# Public gateway IP. Always reserved, so switching ingress_exposure back and forth never
+# tries to delete an IP that a load balancer is still using, and the URLs never change.
+resource "google_compute_address" "ingress_public" {
+  name         = "${var.cluster_name}-ingress"
+  project      = var.project_id
+  region       = var.region
+  address_type = "EXTERNAL"
+  network_tier = "PREMIUM"
+  labels       = local.labels
+}
+
 # Egress for private nodes (image pulls, GitHub, Wiz)
 resource "google_compute_router" "router" {
   name    = "${var.cluster_name}-router"
@@ -43,7 +63,8 @@ resource "google_compute_router_nat" "nat" {
   project                            = var.project_id
   region                             = var.region
   router                             = google_compute_router.router.name
-  nat_ip_allocate_option             = "AUTO_ONLY"
+  nat_ip_allocate_option             = "MANUAL_ONLY"
+  nat_ips                            = [google_compute_address.nat.self_link]
   source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
 
   log_config {

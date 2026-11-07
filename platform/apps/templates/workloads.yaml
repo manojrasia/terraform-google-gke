@@ -1,6 +1,8 @@
 {{- if .Values.workloads.enabled }}
 # Every folder workloads/<app>/overlays/<environment> becomes an Application
 # in namespace <app>, in the restricted "workloads" project.
+# An HTTPRoute named <app> automatically gets the hostname <app>.<cluster domain>,
+# so apps never hard-code a domain (it differs between internal and public mode).
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -28,6 +30,15 @@ spec:
         repoURL: {{ .Values.repoURL }}
         targetRevision: {{ .Values.targetRevision }}
         path: '{{`{{ .path.path }}`}}'
+        kustomize:
+          patches:
+            - target:
+                kind: HTTPRoute
+                name: '{{`{{ index .path.segments 1 }}`}}'
+              patch: |-
+                - op: replace
+                  path: /spec/hostnames
+                  value: ['{{`{{ index .path.segments 1 }}`}}.{{ .Values.cluster.domain }}']
       destination:
         server: https://kubernetes.default.svc
         namespace: '{{`{{ index .path.segments 1 }}`}}'
@@ -41,9 +52,9 @@ spec:
           labels:
             owner: '{{`{{ index .path.segments 1 }}`}}'
         retry:
-          limit: 5
+          limit: -1
           backoff:
-            duration: 30s
+            duration: 20s
             factor: 2
-            maxDuration: 5m
+            maxDuration: 3m
 {{- end }}

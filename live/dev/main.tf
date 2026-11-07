@@ -14,7 +14,26 @@ module "cluster" {
   region       = local.region
   cluster_name = "dev-gke"
   environment  = "dev"
-  dns_domain   = "dev.stack.internal"
+
+  # ------------------------------------------------------------------
+  # HOW YOU REACH THE UIs - the only switch you need
+  #   "public"   -> open http://argocd.<ip>.sslip.io from your laptop, no tunnel, no hosts file
+  #   "internal" -> internal LB + private DNS; browse through the bastion SOCKS proxy
+  # Commit + merge; CI applies Terraform and re-points Argo CD. Both modes can be toggled any time.
+  # ------------------------------------------------------------------
+  ingress_exposure = "public"
+
+  # Used when ingress_exposure = "internal"
+  dns_domain = "dev.stack.internal"
+
+  # Used when ingress_exposure = "public"
+  public_domain                = ""            # "" = automatic <ip>.sslip.io, or a domain you own
+  public_ingress_allowed_cidrs = ["0.0.0.0/0"] # tighten to your IP: ["<curl ifconfig.me>/32"]
+
+  # Control plane: kubectl already works from anywhere through the IAM-protected DNS endpoint.
+  # Set true only if you also want the classic public IP endpoint; then add your IP below.
+  public_control_plane       = false
+  master_authorized_networks = [] # e.g. [{ cidr_block = "1.2.3.4/32", display_name = "me" }]
 
   # Must not overlap with other clusters you may peer/VPN together
   subnet_cidr      = "10.10.0.0/20"
@@ -35,8 +54,8 @@ module "cluster" {
   cluster_admins     = ["user:manoj1chaurasia2@gmail.com"]
   cluster_developers = []
 
-  deletion_protection = false
-  enable_bastion      = true
+  deletion_protection = false # dev: lets `terraform destroy` work in one go
+  enable_bastion      = true  # only needed for "internal"; harmless otherwise
   enable_wiz          = false
   enable_slack_alerts = false
 }

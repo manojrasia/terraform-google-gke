@@ -7,7 +7,7 @@ spec:
     - name: main
       namespace: envoy-gateway-system
   hostnames:
-    - hello.example.internal   # replaced per environment
+    - hello.example.internal   # replaced by Argo CD with hello.<cluster domain>
   rules:
     - backendRefs:
         - name: hello

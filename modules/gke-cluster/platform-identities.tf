@@ -14,8 +14,9 @@ resource "google_project_iam_member" "external_dns_reader" {
 }
 
 resource "google_dns_managed_zone_iam_member" "external_dns_zone_admin" {
+  count        = local.dns_zone_enabled ? 1 : 0
   project      = var.project_id
-  managed_zone = google_dns_managed_zone.internal.name
+  managed_zone = google_dns_managed_zone.this[0].name
   role         = "roles/dns.admin"
   member       = "serviceAccount:${google_service_account.external_dns.email}"
 }
