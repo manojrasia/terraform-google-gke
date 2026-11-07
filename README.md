@@ -228,3 +228,60 @@ kubectl -n envoy-gateway-system get svc         # wait until the LB service is g
   Let's Encrypt (works with sslip.io or your domain), then `cookie_secure = true`.
 - **No default-deny NetworkPolicies** yet; add per namespace once traffic flows are known.
 - GitHub Actions are pinned to major versions; pin to commit SHAs for supply-chain hardening.
+
+
+To access hello app
+
+ kubectl -n envoy-gateway-system get svc   
+
+ curl.exe -sI http://hello.34-47-167-37.sslip.io
+
+ http://hello.34-47-167-37.sslip.io
+
+ destroy all infra
+
+ Use PowerShell from your repo folder.
+
+1. Stop Argo CD from re-creating things
+powershell
+cd D:\terraform-google-gke-v3
+git switch main; git pull
+gcloud container clusters get-credentials dev-gke --region asia-south1 --project boreal-conquest-421512 --dns-endpoint
+
+kubectl -n argocd scale deployment --all --replicas=0
+kubectl -n argocd scale statefulset --all --replicas=0
+kubectl -n envoy-gateway-system scale deployment envoy-gateway --replicas=0
+2. Delete the load balancer(s)
+powershell
+kubectl get svc -A --no-headers -o custom-columns="NS:.metadata.namespace,NAME:.metadata.name,TYPE:.spec.type" |
+  ForEach-Object { $c = -split $_; if ($c[2] -eq "LoadBalancer") { kubectl -n $c[0] delete svc $c[1] } }
+
+Wait 1–3 minutes until this shows nothing:
+
+powershell
+gcloud compute forwarding-rules list --project boreal-conquest-421512
+3. Destroy the infrastructure
+powershell
+gcloud auth application-default login     # Terraform uses your Owner account locally
+terraform -chdir=live/dev init -backend-config=backend.hcl
+terraform -chdir=live/dev destroy
+
+Check the plan says it will destroy the cluster, VPC, NAT, bastion, IPs, DNS zone and secrets, then type yes. It takes about 10–15 minutes.
+
+4. Delete leftover disks
+
+Prometheus, Grafana and Alertmanager stored data on persistent disks. Those disks aren’t deleted with the cluster, and they keep costing money:
+
+powershell
+gcloud compute disks list --project boreal-conquest-421512 --filter="name~^pvc-"
+gcloud compute disks list --project boreal-conquest-421512 --filter="name~^pvc-" --format="value(name,zone.basename())" |
+  ForEach-Object { $d = -split $_; gcloud compute disks delete $d[0] --zone $d[1] --project boreal-conquest-421512 --quiet }
+
+Final check:
+
+powershell
+gcloud container clusters list --project boreal-conquest-421512
+gcloud compute addresses list --project boreal-conquest-421512
+gcloud compute disks list --project boreal-conquest-421512
+
+All three should be empty.
