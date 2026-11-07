@@ -17,7 +17,7 @@ auth:
     # (they change only if you switch ingress_exposure or the domain)
     # Put the Client ID here and the Client secret in Secret Manager:
     #   printf '%s' 'SECRET' | gcloud secrets versions add dev-gke-dex-github-client-secret --data-file=-
-    clientID: "REPLACE_WITH_GITHUB_OAUTH_CLIENT_ID"
+    clientID: "Ov23ctwl58REIksAsOeb"
     orgs: []                       # e.g. [my-company] to allow only org members
   # Emails exactly as GitHub reports them (your primary, verified GitHub email)
   admins:
