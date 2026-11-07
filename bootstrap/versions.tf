@@ -9,10 +9,10 @@ terraform {
   }
 
   # Run once with local state, then uncomment and `terraform init -migrate-state`
-   backend "gcs" {
-     bucket = "boreal-conquest-421512-tfstate"
-     prefix = "bootstrap"
-   }
+  backend "gcs" {
+    bucket = "boreal-conquest-421512-tfstate"
+    prefix = "bootstrap"
+  }
 }
 
 
