@@ -118,6 +118,6 @@ jobs:
       - uses: azure/setup-helm@v4
       - name: bootstrap Argo CD
         working-directory: .
-        run: scripts/bootstrap-argocd.sh "live/${{ matrix.env }}"
+        run: bash scripts/bootstrap-argocd.sh "live/${{ matrix.env }}"
       - name: URLs
         run: terraform output urls
