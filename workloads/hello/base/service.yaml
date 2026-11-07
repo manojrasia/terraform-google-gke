@@ -7,3 +7,6 @@ spec:
     - name: http
       port: 80
       targetPort: http
+    - name: metrics          # scraped by the ServiceMonitor; not exposed by the HTTPRoute
+      port: 9113
+      targetPort: metrics

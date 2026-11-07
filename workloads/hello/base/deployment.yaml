@@ -37,3 +37,32 @@ spec:
             httpGet: { path: /, port: http }
           livenessProbe:
             httpGet: { path: /, port: http }
+          volumeMounts:
+            - name: nginx-status
+              mountPath: /etc/nginx/conf.d/status.conf
+              subPath: status.conf
+              readOnly: true
+
+        # Turns nginx's stub_status into Prometheus metrics on :9113/metrics
+        - name: exporter
+          image: nginx/nginx-prometheus-exporter:1.4.2
+          args:
+            - --nginx.scrape-uri=http://127.0.0.1:8081/stub_status
+          ports:
+            - name: metrics
+              containerPort: 9113
+          securityContext:
+            runAsUser: 65534
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests: { cpu: 5m, memory: 16Mi }
+            limits:   { memory: 32Mi }
+          readinessProbe:
+            httpGet: { path: /metrics, port: metrics }
+      volumes:
+        - name: nginx-status
+          configMap:
+            name: hello-nginx-status

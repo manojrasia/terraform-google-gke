@@ -9,3 +9,9 @@ resources:
   - service.yaml
   - pdb.yaml
   - httproute.yaml
+  - servicemonitor.yaml
+  - prometheusrule.yaml
+configMapGenerator:
+  - name: hello-nginx-status      # hash suffix -> pods restart when the config changes
+    files:
+      - status.conf=nginx-status.conf
