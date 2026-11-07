@@ -1,8 +1,11 @@
-# Single shared Gateway on a GCP internal passthrough load balancer
+{{- $public := eq .Values.ingress.exposure "public" }}
+# Single shared Gateway. ingress.exposure (set in Terraform) picks the load balancer:
+#   internal -> GCP internal passthrough LB (VPC only)
+#   public   -> GCP external passthrough LB on the reserved static IP, limited to sourceRanges
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: EnvoyProxy
 metadata:
-  name: internal-lb
+  name: gateway-lb
   namespace: envoy-gateway-system
 spec:
   provider:
@@ -19,9 +22,17 @@ spec:
       envoyService:
         type: LoadBalancer
         externalTrafficPolicy: Local    # keep client source IPs
+        {{- if $public }}
+        loadBalancerIP: {{ required "ingress.publicIP is required for public exposure" .Values.ingress.publicIP }}
+        loadBalancerSourceRanges:
+          {{- toYaml (required "ingress.sourceRanges is required for public exposure" .Values.ingress.sourceRanges) | nindent 10 }}
+        annotations:
+          cloud.google.com/l4-rbs: "enabled"   # backend-service based external passthrough LB
+        {{- else }}
         annotations:
           networking.gke.io/load-balancer-type: "Internal"
           networking.gke.io/internal-load-balancer-allow-global-access: "true"
+        {{- end }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
@@ -32,7 +43,7 @@ spec:
   parametersRef:
     group: gateway.envoyproxy.io
     kind: EnvoyProxy
-    name: internal-lb
+    name: gateway-lb
     namespace: envoy-gateway-system
 ---
 apiVersion: gateway.networking.k8s.io/v1
@@ -46,7 +57,7 @@ spec:
     - name: http
       protocol: HTTP
       port: 80
-      hostname: "*.{{ .Values.cluster.domain }}"
+      hostname: "*.{{ required "cluster.domain is required" .Values.cluster.domain }}"
       allowedRoutes:
         namespaces:
           from: All

@@ -2,11 +2,4 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../../base
-patches:
-  - target:
-      kind: HTTPRoute
-      name: hello
-    patch: |-
-      - op: replace
-        path: /spec/hostnames/0
-        value: hello.dev.stack.internal
+# The HTTPRoute hostname is set by Argo CD to hello.<cluster domain> (see platform/apps/templates/workloads.yaml)

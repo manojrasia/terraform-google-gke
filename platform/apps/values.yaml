@@ -8,7 +8,17 @@ cluster:
   projectId: ""
   region: ""
   environment: ""
-  domain: ""
+  domain: ""          # from Terraform output platform_values
+
+# From Terraform output platform_values (scripts/bootstrap-argocd.sh puts them on the root app).
+# Change them in live/<env>/main.tf (ingress_exposure), not here.
+ingress:
+  exposure: internal  # internal | public
+  publicIP: ""
+  sourceRanges: []
+dns:
+  managed: true       # false = no Cloud DNS zone (sslip.io), ExternalDNS is not installed
+  visibility: private # private | public
 
 auth:
   github:

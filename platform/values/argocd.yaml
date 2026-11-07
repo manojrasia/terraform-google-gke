@@ -11,15 +11,42 @@ configs:
     admin.enabled: false             # SSO only; break-glass = kubectl via IAM
     exec.enabled: false
     timeout.reconciliation: 180s
-    # Let sync waves wait for child Applications to become Healthy (app-of-apps ordering)
-    resource.customizations.health.argoproj.io_Application: |
-      hs = {}
-      hs.status = "Progressing"
-      hs.message = ""
-      if obj.status ~= nil and obj.status.health ~= nil then
-        hs.status = obj.status.health.status
-        if obj.status.health.message ~= nil then
-          hs.message = obj.status.health.message
+    # NOTE: there is deliberately NO health check for argoproj.io/Application.
+    # Without it, sync waves only order creation; they never block on a child app's health.
+    # Every child app retries on its own until its dependencies exist (eventual consistency).
+    # This is what removes yesterday's deadlocks (root stuck behind platform-config /
+    # kube-prometheus-stack) - one slow or broken add-on can no longer stall all the others.
+    #
+    # An HTTPRoute is Healthy once the Gateway accepts it, even if its backend
+    # Service does not exist yet (e.g. Grafana still installing).
+    resource.customizations.health.gateway.networking.k8s.io_HTTPRoute: |
+      hs = { status = "Progressing", message = "Waiting for the Gateway to accept the route" }
+      if obj.status ~= nil and obj.status.parents ~= nil then
+        for _, p in ipairs(obj.status.parents) do
+          for _, c in ipairs(p.conditions or {}) do
+            if c.type == "Accepted" and c.status == "True" then
+              hs.status = "Healthy"
+              hs.message = "Accepted by gateway"
+            elseif c.type == "Accepted" and c.status == "False" then
+              hs.status = "Degraded"
+              hs.message = c.message
+            end
+          end
+        end
+      end
+      return hs
+    # ExternalSecret: missing remote value (e.g. GitHub secret not added yet) shows as
+    # Progressing with the reason, instead of Degraded.
+    resource.customizations.health.external-secrets.io_ExternalSecret: |
+      hs = { status = "Progressing", message = "Waiting for secret sync" }
+      if obj.status ~= nil and obj.status.conditions ~= nil then
+        for _, c in ipairs(obj.status.conditions) do
+          if c.type == "Ready" and c.status == "True" then
+            hs.status = "Healthy"
+            hs.message = c.message
+          elseif c.type == "Ready" then
+            hs.message = c.message or c.reason
+          end
         end
       end
       return hs

@@ -23,16 +23,13 @@ env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
   TF_VERSION: "1.16.7"
-  WIF_PROVIDER: projects/171872810071/locations/global/workloadIdentityPools/github/providers/github-actions
-  PLAN_SA: gha-terraform-plan@boreal-conquest-421512.iam.gserviceaccount.com
-  APPLY_SA: gha-terraform-apply@boreal-conquest-421512.iam.gserviceaccount.com
 
 jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: hashicorp/setup-terraform@v4
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
       - run: terraform fmt -check -recursive -diff
@@ -62,12 +59,12 @@ jobs:
       run:
         working-directory: live/${{ matrix.env }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: google-github-actions/auth@v3
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ env.WIF_PROVIDER }}
-          service_account: ${{ env.PLAN_SA }}
-      - uses: hashicorp/setup-terraform@v4
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_TF_PLAN_SA }}
+      - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
       - run: terraform init -backend-config=backend.hcl
@@ -100,29 +97,27 @@ jobs:
       run:
         working-directory: live/${{ matrix.env }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: google-github-actions/auth@v3
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ env.WIF_PROVIDER }}
-          service_account: ${{ env.APPLY_SA }}
-          token_format: access_token
-      - uses: hashicorp/setup-terraform@v4
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_TF_APPLY_SA }}
+      - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
           terraform_wrapper: false
       - run: terraform init -backend-config=backend.hcl
       - run: terraform plan -lock-timeout=5m -out=tfplan
       - run: terraform apply -lock-timeout=5m tfplan
-      - name: cluster name
-        id: out
-        run: echo "name=$(terraform output -json cluster | jq -r .name)" >> "$GITHUB_OUTPUT"
 
-      # ---- GitOps bootstrap (idempotent; no-op once Argo CD is running) ----
-      - uses: google-github-actions/setup-gcloud@v3
+      # ---- GitOps bootstrap (idempotent). Re-applies the root app with the current
+      # Terraform outputs, so an ingress_exposure switch reaches Argo CD right away ----
+      - uses: google-github-actions/setup-gcloud@v2
         with:
           install_components: gke-gcloud-auth-plugin
-      - uses: azure/setup-helm@v5
+      - uses: azure/setup-helm@v4
       - name: bootstrap Argo CD
         working-directory: .
-        run: bash scripts/bootstrap-argocd.sh "platform/clusters/${{ steps.out.outputs.name }}.yaml"
-        
+        run: scripts/bootstrap-argocd.sh "live/${{ matrix.env }}"
+      - name: URLs
+        run: terraform output urls

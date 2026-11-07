@@ -22,7 +22,7 @@ resource "google_container_cluster" "this" {
 
   private_cluster_config {
     enable_private_nodes    = true
-    enable_private_endpoint = true # no public IP endpoint
+    enable_private_endpoint = !var.public_control_plane
     master_ipv4_cidr_block  = var.master_ipv4_cidr
 
     master_global_access_config {
