@@ -112,7 +112,7 @@ jobs:
 
       # ---- GitOps bootstrap (idempotent). Re-applies the root app with the current
       # Terraform outputs, so an ingress_exposure switch reaches Argo CD right away ----
-      - uses: google-github-actions/setup-gcloud@v2
+      - uses: google-github-actions/setup-gcloud@v3
         with:
           install_components: gke-gcloud-auth-plugin
       - uses: azure/setup-helm@v4
